@@ -1,7 +1,7 @@
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import { Gem, Hammer, Map, MoveUpRight, Shield, Swords, Wheat } from "lucide-react";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 import { AgentTracePanel } from "./components/AgentTracePanel";
 import { SceneOverview } from "./components/SceneOverview";
 import { demoSceneSpec } from "./world/demoSceneSpec";
@@ -32,7 +32,9 @@ export function App() {
             shadow-mapSize-height={2048}
           />
           <hemisphereLight args={["#fff4da", "#b6c7a5", 1.3]} />
-          <GameStyleWorld />
+          <Suspense fallback={null}>
+            <GameStyleWorld />
+          </Suspense>
           <OrbitControls
             enablePan={false}
             minZoom={42}

@@ -1,16 +1,57 @@
+import { useGLTF } from "@react-three/drei";
+import { useMemo } from "react";
 import * as THREE from "three";
 
 const ground = "#d8cb9b";
 const groundEdge = "#b7aa7f";
 const road = "#f4ead0";
 const water = "#9fc8c2";
-const stone = "#d9d3be";
 const wood = "#745335";
-const darkWood = "#4f3520";
+const hexAssetPath = "/kenney_hexagon-kit/Models/GLB%20format/";
+const arenaAssetPath = "/kenney_mini-arena/Models/GLB%20format/";
 
 type Vec2 = [number, number];
-type Faction = "blue" | "red" | "green" | "yellow";
-type UnitKind = "infantry" | "archer" | "cavalry";
+
+type ModelProps = {
+  url: string;
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: number | [number, number, number];
+  tint?: string;
+  tintStrength?: number;
+};
+
+function KenneyModel({ url, position = [0, 0, 0], rotation = [0, 0, 0], scale = 1, tint, tintStrength = 0 }: ModelProps) {
+  const gltf = useGLTF(url);
+
+  const scene = useMemo(() => {
+    const clone = gltf.scene.clone(true);
+    const tintColor = tint ? new THREE.Color(tint) : null;
+
+    clone.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const clonedMaterials = materials.map((material) => {
+        const cloned = material.clone();
+        if (tintColor && "color" in cloned && cloned.color instanceof THREE.Color) {
+          cloned.color.lerp(tintColor, tintStrength);
+        }
+        return cloned;
+      });
+
+      mesh.material = Array.isArray(mesh.material) ? clonedMaterials : clonedMaterials[0];
+    });
+
+    return clone;
+  }, [gltf.scene, tint, tintStrength]);
+
+  return <primitive object={scene} position={position} rotation={rotation} scale={scale} />;
+}
 
 export function GameStyleWorld() {
   return (
@@ -22,19 +63,19 @@ export function GameStyleWorld() {
       <Plateau position={[0.2, 0.05, -5.1]} radius={1.18} color="#c9bd92" />
       <Plateau position={[-5.1, 0.05, -2.1]} radius={1.18} color="#bcc88e" />
       <Plateau position={[5.1, 0.05, -2.2]} radius={1.18} color="#d4c585" />
-      <Castle position={[0, 0.22, 5.55]} factionColor="#2f6fb7" label="BLUEHOLD" scale={1.16} hero />
-      <Castle position={[0.2, 0.22, -5.1]} factionColor="#b95045" label="REDHALL" scale={1.04} />
-      <Castle position={[-5.1, 0.22, -2.1]} factionColor="#5a8f57" label="GREENDALE" scale={1.02} />
-      <Castle position={[5.1, 0.22, -2.2]} factionColor="#d6af35" label="SUNFORD" scale={1.02} />
+      <Castle position={[0, 0.22, 4.95]} factionColor="#2f6fb7" label="BLUEHOLD" scale={1.28} hero />
+      <Castle position={[0.2, 0.22, -5.1]} factionColor="#b95045" label="REDHALL" scale={1.12} />
+      <Castle position={[-5.1, 0.22, -2.1]} factionColor="#5a8f57" label="GREENDALE" scale={1.1} />
+      <Castle position={[5.1, 0.22, -2.2]} factionColor="#d6af35" label="SUNFORD" scale={1.1} />
       <Outpost position={[1.2, 0.18, -1.25]} />
       <ArrowTower position={[4.3, 0.2, 2.25]} />
       <GrainDepot position={[-5.1, 0.12, 2.2]} />
       <Barricades position={[-4.35, 0.16, 3.35]} />
       <Hill position={[-4.8, 0.08, 0.35]} />
       <Forest />
-      <ArmyCluster color="#2f6fb7" faction="blue" position={[0, 0.22, 3.6]} rows={3} lead />
-      <ArmyCluster color="#b95045" faction="red" position={[0.7, 0.22, 0.55]} rows={2} />
-      <ArmyCluster color="#d6af35" faction="yellow" position={[1.75, 0.22, 0.65]} rows={2} />
+      <ArmyCluster color="#2f6fb7" position={[0, 0.22, 3.35]} rows={3} lead />
+      <ArmyCluster color="#b95045" position={[0.7, 0.22, 0.55]} rows={2} />
+      <ArmyCluster color="#d6af35" position={[1.75, 0.22, 0.65]} rows={2} />
       <MarchPath points={[[0, 4.65], [0.15, 3.35], [0.75, 2.15], [1.35, 0.95]]} color="#2f6fb7" />
       <MarchPath points={[[0.25, 3.45], [-1.25, 2.75], [-3.2, 3.25]]} color="#2f6fb7" />
       <MarchPath points={[[1.1, 3.2], [2.45, 2.8], [3.7, 2.15]]} color="#2f6fb7" />
@@ -205,188 +246,67 @@ function Castle({
 }) {
   return (
     <group position={position} scale={scale}>
-      <mesh position={[0, -0.05, 0]}>
-        <cylinderGeometry args={[0.98, 1.08, 0.2, 48]} />
+      <mesh position={[0, -0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[hero ? 1.62 : 1.36, 48]} />
         <meshStandardMaterial color="#c8b991" roughness={0.8} />
       </mesh>
-      <mesh position={[0, 0.13, 0]}>
-        <boxGeometry args={[1.42, 0.28, 1.08]} />
-        <meshStandardMaterial color="#cfc7ad" roughness={0.72} />
+      <mesh position={[0, 0.01, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[hero ? 1.3 : 1.1, hero ? 1.52 : 1.28, 48]} />
+        <meshBasicMaterial color={factionColor} transparent opacity={hero ? 0.3 : 0.22} />
       </mesh>
-      <mesh position={[0, 0.29, 0.67]}>
-        <boxGeometry args={[1.78, 0.2, 0.16]} />
-        <meshStandardMaterial color="#ebe5d4" roughness={0.72} />
-      </mesh>
-      <mesh position={[0, 0.29, -0.67]}>
-        <boxGeometry args={[1.78, 0.2, 0.16]} />
-        <meshStandardMaterial color="#ebe5d4" roughness={0.72} />
-      </mesh>
-      <mesh position={[-0.89, 0.29, 0]}>
-        <boxGeometry args={[0.16, 0.2, 1.34]} />
-        <meshStandardMaterial color="#ebe5d4" roughness={0.72} />
-      </mesh>
-      <mesh position={[0.89, 0.29, 0]}>
-        <boxGeometry args={[0.16, 0.2, 1.34]} />
-        <meshStandardMaterial color="#ebe5d4" roughness={0.72} />
-      </mesh>
-      <mesh position={[0, 0.42, 0]}>
-        <boxGeometry args={[1.06, 0.58, 0.82]} />
-        <meshStandardMaterial color={stone} roughness={0.72} />
-      </mesh>
-      <mesh position={[0, 0.77, 0]} rotation={[0, Math.PI / 4, 0]}>
-        <boxGeometry args={[0.9, 0.13, 0.9]} />
-        <meshStandardMaterial color={factionColor} roughness={0.62} />
-      </mesh>
-      {hero ? <HeroCastleMass color={factionColor} /> : null}
-      <Gate color={factionColor} />
-      <Battlements width={1.48} depth={1.14} y={0.35} />
+      <KenneyModel
+        url={`${hexAssetPath}building-castle.glb`}
+        position={[0, 0.02, 0]}
+        rotation={[0, Math.PI / 6, 0]}
+        scale={hero ? 1.28 : 1.02}
+        tint={factionColor}
+        tintStrength={0.16}
+      />
+      {hero ? <HeroCastleKit color={factionColor} /> : <SmallCastleKit color={factionColor} />}
+      <AssetBanner position={[0, hero ? 1.62 : 1.28, 0.18]} color={factionColor} scale={hero ? 0.34 : 0.26} />
+      <Label text={label} position={[0, hero ? 2.02 : 1.6, 0]} color={factionColor} />
+    </group>
+  );
+}
+
+function HeroCastleKit({ color }: { color: string }) {
+  return (
+    <group>
       {[
-        [-0.66, 0, -0.52],
-        [0.66, 0, -0.52],
-        [-0.66, 0, 0.52],
-        [0.66, 0, 0.52],
-      ].map(([x, , z], index) => (
-        <Tower key={index} position={[x, 0.25, z]} color={factionColor} />
+        [-1.05, 0.02, -0.75, 0],
+        [1.05, 0.02, -0.75, 0],
+        [-1.05, 0.02, 0.75, Math.PI],
+        [1.05, 0.02, 0.75, Math.PI],
+      ].map(([x, y, z, rotation], index) => (
+        <KenneyModel
+          key={index}
+          url={`${hexAssetPath}unit-wall-tower.glb`}
+          position={[x, y, z]}
+          rotation={[0, rotation, 0]}
+          scale={0.6}
+          tint={color}
+          tintStrength={0.18}
+        />
       ))}
-      {hero ? <KeepTower color={factionColor} /> : null}
-      <Flag position={[0, hero ? 1.35 : 1.08, 0.04]} color={factionColor} />
-      <Label text={label} position={[0, hero ? 1.72 : 1.46, 0]} color={factionColor} />
+      <KenneyModel url={`${hexAssetPath}building-walls.glb`} position={[0, 0.01, -1.06]} rotation={[0, Math.PI / 6, 0]} scale={0.72} tint={color} tintStrength={0.12} />
+      <KenneyModel url={`${hexAssetPath}building-tower.glb`} position={[0.96, 0.03, 1.0]} rotation={[0, -0.45, 0]} scale={0.66} tint={color} tintStrength={0.18} />
     </group>
   );
 }
 
-function Gate({ color }: { color: string }) {
-  return (
-    <group position={[0, 0.18, 0.57]}>
-      <mesh position={[0, 0.04, 0]}>
-        <boxGeometry args={[0.36, 0.3, 0.045]} />
-        <meshStandardMaterial color={darkWood} roughness={0.78} />
-      </mesh>
-      <mesh position={[0, 0.23, 0.01]}>
-        <boxGeometry args={[0.52, 0.05, 0.065]} />
-        <meshStandardMaterial color={color} roughness={0.62} />
-      </mesh>
-      <mesh position={[-0.24, 0.1, 0.02]}>
-        <boxGeometry args={[0.055, 0.34, 0.075]} />
-        <meshStandardMaterial color="#eee7d5" roughness={0.7} />
-      </mesh>
-      <mesh position={[0.24, 0.1, 0.02]}>
-        <boxGeometry args={[0.055, 0.34, 0.075]} />
-        <meshStandardMaterial color="#eee7d5" roughness={0.7} />
-      </mesh>
-    </group>
-  );
-}
-
-function HeroCastleMass({ color }: { color: string }) {
+function SmallCastleKit({ color }: { color: string }) {
   return (
     <group>
-      <mesh position={[0, 0.12, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[1.12, 1.22, 48]} />
-        <meshBasicMaterial color={color} transparent opacity={0.32} />
-      </mesh>
-      <mesh position={[0, 0.65, -0.22]}>
-        <boxGeometry args={[0.58, 0.76, 0.5]} />
-        <meshStandardMaterial color="#f0e9d6" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 1.1, -0.22]} rotation={[0, Math.PI / 4, 0]}>
-        <boxGeometry args={[0.52, 0.13, 0.52]} />
-        <meshStandardMaterial color={color} roughness={0.58} />
-      </mesh>
-      <mesh position={[-0.42, 0.58, 0.45]}>
-        <cylinderGeometry args={[0.15, 0.17, 0.62, 10]} />
-        <meshStandardMaterial color="#eee7d5" roughness={0.72} />
-      </mesh>
-      <mesh position={[0.42, 0.58, 0.45]}>
-        <cylinderGeometry args={[0.15, 0.17, 0.62, 10]} />
-        <meshStandardMaterial color="#eee7d5" roughness={0.72} />
-      </mesh>
-      <mesh position={[-0.42, 1.02, 0.45]}>
-        <coneGeometry args={[0.23, 0.36, 10]} />
-        <meshStandardMaterial color={color} roughness={0.6} />
-      </mesh>
-      <mesh position={[0.42, 1.02, 0.45]}>
-        <coneGeometry args={[0.23, 0.36, 10]} />
-        <meshStandardMaterial color={color} roughness={0.6} />
-      </mesh>
-      <mesh position={[0, 0.32, 0.68]}>
-        <boxGeometry args={[0.86, 0.18, 0.11]} />
-        <meshStandardMaterial color="#e7dfca" roughness={0.72} />
-      </mesh>
-      <mesh position={[0, 0.55, 0.77]}>
-        <boxGeometry args={[0.38, 0.18, 0.08]} />
-        <meshStandardMaterial color={color} roughness={0.62} />
-      </mesh>
+      <KenneyModel url={`${hexAssetPath}building-wall.glb`} position={[0.8, 0.01, 0.72]} rotation={[0, -0.2, 0]} scale={0.52} tint={color} tintStrength={0.14} />
+      <KenneyModel url={`${hexAssetPath}unit-wall-tower.glb`} position={[-0.86, 0.01, -0.68]} rotation={[0, 0.4, 0]} scale={0.46} tint={color} tintStrength={0.16} />
     </group>
   );
 }
 
-function Battlements({ width, depth, y }: { width: number; depth: number; y: number }) {
-  const positions: [number, number, number][] = [];
-  [-width / 2, -width / 6, width / 6, width / 2].forEach((x) => {
-    positions.push([x, y, depth / 2], [x, y, -depth / 2]);
-  });
-  [-depth / 6, depth / 6].forEach((z) => {
-    positions.push([-width / 2, y, z], [width / 2, y, z]);
-  });
-
-  return (
-    <group>
-      {positions.map((position, index) => (
-        <mesh key={index} position={position}>
-          <boxGeometry args={[0.13, 0.13, 0.1]} />
-          <meshStandardMaterial color="#ebe5d4" roughness={0.72} />
-        </mesh>
-      ))}
-    </group>
-  );
-}
-
-function KeepTower({ color }: { color: string }) {
-  return (
-    <group position={[0, 0.72, -0.04]}>
-      <mesh position={[0, 0.12, 0]}>
-        <cylinderGeometry args={[0.22, 0.24, 0.55, 12]} />
-        <meshStandardMaterial color="#e9e2cf" roughness={0.7} />
-      </mesh>
-      <mesh position={[0, 0.55, 0]}>
-        <coneGeometry args={[0.34, 0.46, 12]} />
-        <meshStandardMaterial color={color} roughness={0.58} />
-      </mesh>
-    </group>
-  );
-}
-
-function Tower({ position, color }: { position: [number, number, number]; color: string }) {
+function AssetBanner({ position, color, scale = 0.24 }: { position: [number, number, number]; color: string; scale?: number }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.1, 0]}>
-        <cylinderGeometry args={[0.2, 0.23, 0.7, 12]} />
-        <meshStandardMaterial color="#e7e0cc" roughness={0.72} />
-      </mesh>
-      <mesh position={[0, 0.65, 0]}>
-        <coneGeometry args={[0.28, 0.42, 12]} />
-        <meshStandardMaterial color={color} roughness={0.65} />
-      </mesh>
-    </group>
-  );
-}
-
-function Flag({ position, color }: { position: [number, number, number]; color: string }) {
-  return (
-    <group position={position}>
-      <mesh position={[0, 0.15, 0]}>
-        <cylinderGeometry args={[0.015, 0.015, 0.58, 8]} />
-        <meshStandardMaterial color="#5b4630" />
-      </mesh>
-      <mesh position={[0.17, 0.34, 0]}>
-        <boxGeometry args={[0.32, 0.18, 0.025]} />
-        <meshStandardMaterial color={color} roughness={0.42} />
-      </mesh>
-      <mesh position={[0.31, 0.26, 0]}>
-        <coneGeometry args={[0.06, 0.12, 3]} />
-        <meshStandardMaterial color={color} roughness={0.42} />
-      </mesh>
+      <KenneyModel url={`${arenaAssetPath}banner.glb`} scale={scale} tint={color} tintStrength={0.55} />
     </group>
   );
 }
@@ -419,26 +339,10 @@ function Label({ text, position, color }: { text: string; position: [number, num
 function Outpost({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.18, 0]}>
-        <coneGeometry args={[0.45, 0.75, 4]} />
-        <meshStandardMaterial color="#d7c199" roughness={0.7} />
-      </mesh>
-      <Flag position={[0, 0.65, 0]} color="#2f6fb7" />
-      <BunchedLogs />
+      <KenneyModel url={`${hexAssetPath}building-cabin.glb`} position={[0, 0.02, 0]} rotation={[0, -0.45, 0]} scale={0.78} tint="#2f6fb7" tintStrength={0.16} />
+      <KenneyModel url={`${hexAssetPath}dirt-lumber.glb`} position={[-0.52, 0.02, 0.5]} rotation={[0, 0.35, 0]} scale={0.58} />
+      <AssetBanner position={[0.1, 0.72, 0]} color="#2f6fb7" scale={0.18} />
       <Label text="OUTPOST CAMP" position={[0.88, 0.95, 0]} color="#4c4c50" />
-    </group>
-  );
-}
-
-function BunchedLogs() {
-  return (
-    <group>
-      {[-0.35, -0.18, 0, 0.18, 0.35].map((x) => (
-        <mesh key={x} position={[x, 0.12, 0.42]} rotation={[Math.PI / 2, 0.2, 0]}>
-          <cylinderGeometry args={[0.04, 0.04, 0.55, 8]} />
-          <meshStandardMaterial color={wood} roughness={0.82} />
-        </mesh>
-      ))}
     </group>
   );
 }
@@ -446,16 +350,9 @@ function BunchedLogs() {
 function ArrowTower({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.28, 0]}>
-        <boxGeometry args={[0.34, 0.7, 0.34]} />
-        <meshStandardMaterial color="#e1dac5" roughness={0.72} />
-      </mesh>
-      <mesh position={[0, 0.78, 0]}>
-        <coneGeometry args={[0.34, 0.36, 4]} />
-        <meshStandardMaterial color="#2f6fb7" roughness={0.58} />
-      </mesh>
-      <Flag position={[0.08, 0.9, 0]} color="#2f6fb7" />
-      <Label text="ARROW TOWER" position={[0.8, 1.08, 0]} color="#4c4c50" />
+      <KenneyModel url={`${hexAssetPath}building-tower.glb`} position={[0, 0.02, 0]} rotation={[0, 0.2, 0]} scale={0.98} tint="#2f6fb7" tintStrength={0.22} />
+      <AssetBanner position={[0.08, 1.28, 0]} color="#2f6fb7" scale={0.24} />
+      <Label text="ARROW TOWER" position={[0.88, 1.28, 0]} color="#4c4c50" />
     </group>
   );
 }
@@ -463,20 +360,8 @@ function ArrowTower({ position }: { position: [number, number, number] }) {
 function GrainDepot({ position }: { position: [number, number, number] }) {
   return (
     <group position={position}>
-      <mesh position={[0, 0.18, 0]}>
-        <boxGeometry args={[0.72, 0.38, 0.52]} />
-        <meshStandardMaterial color="#c99f55" roughness={0.76} />
-      </mesh>
-      <mesh position={[0, 0.48, 0]} rotation={[0, Math.PI / 4, 0]}>
-        <boxGeometry args={[0.78, 0.08, 0.78]} />
-        <meshStandardMaterial color="#754d26" roughness={0.76} />
-      </mesh>
-      {[-0.6, -0.42, -0.24, -0.06, 0.12].map((x) => (
-        <mesh key={x} position={[x, 0.1, 0.45]} rotation={[0, 0, 0.18]}>
-          <coneGeometry args={[0.11, 0.5, 8]} />
-          <meshStandardMaterial color="#d8b650" roughness={0.7} />
-        </mesh>
-      ))}
+      <KenneyModel url={`${hexAssetPath}building-farm.glb`} position={[0, 0.02, 0]} rotation={[0, 0.45, 0]} scale={0.88} tint="#d8b650" tintStrength={0.14} />
+      <KenneyModel url={`${hexAssetPath}building-market.glb`} position={[-0.62, 0.02, 0.56]} rotation={[0, -0.4, 0]} scale={0.5} />
       <Label text="GRAIN DEPOT" position={[1.0, 0.72, 0]} color="#6a5b4c" />
     </group>
   );
@@ -559,18 +444,7 @@ function Forest() {
 function Tree({ position, scale = 1 }: { position: [number, number, number]; scale?: number }) {
   return (
     <group position={position} scale={scale}>
-      <mesh position={[0, 0.17, 0]}>
-        <cylinderGeometry args={[0.08, 0.1, 0.34, 8]} />
-        <meshStandardMaterial color="#7c5738" roughness={0.82} />
-      </mesh>
-      <mesh position={[0, 0.52, 0]}>
-        <coneGeometry args={[0.28, 0.55, 8]} />
-        <meshStandardMaterial color="#6d8d5a" roughness={0.74} />
-      </mesh>
-      <mesh position={[0, 0.82, 0]}>
-        <coneGeometry args={[0.22, 0.42, 8]} />
-        <meshStandardMaterial color="#5f7f4e" roughness={0.74} />
-      </mesh>
+      <KenneyModel url={`${hexAssetPath}unit-tree.glb`} scale={0.62} />
     </group>
   );
 }
@@ -586,13 +460,11 @@ function Rock({ position }: { position: [number, number, number] }) {
 
 function ArmyCluster({
   color,
-  faction,
   position,
   rows,
   lead = false,
 }: {
   color: string;
-  faction: Faction;
   position: [number, number, number];
   rows: number;
   lead?: boolean;
@@ -600,160 +472,49 @@ function ArmyCluster({
   const units = Array.from({ length: rows * 5 }, (_, index) => {
     const row = Math.floor(index / 5);
     const col = index % 5;
-    const kind: UnitKind = index % 7 === 0 ? "cavalry" : index % 3 === 1 ? "archer" : "infantry";
     return {
-      kind,
-      position: [col * 0.29 - 0.58, row * 0.27 - 0.26] as Vec2,
+      position: [col * 0.42 - 0.84, row * 0.36 - 0.32] as Vec2,
     };
   });
 
   return (
     <group position={position}>
       <mesh position={[0, -0.015, 0.03]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[lead ? 0.98 : 0.74, 32]} />
+        <circleGeometry args={[lead ? 1.24 : 0.95, 32]} />
         <meshBasicMaterial color={color} transparent opacity={lead ? 0.2 : 0.14} />
       </mesh>
       {units.map((unit, index) => (
-        <Unit key={index} color={color} faction={faction} kind={unit.kind} position={[unit.position[0], 0, unit.position[1]]} />
+        <Soldier key={index} color={color} position={[unit.position[0], 0, unit.position[1]]} rotation={index % 2 === 0 ? 0.18 : -0.18} />
       ))}
-      <Flag position={[0, lead ? 1.0 : 0.82, -0.3]} color={color} />
-      {lead ? <Commander color={color} /> : null}
+      <AssetBanner position={[0, lead ? 1.12 : 0.92, -0.42]} color={color} scale={lead ? 0.22 : 0.18} />
+      {lead ? <Soldier color={color} position={[0, 0.02, -0.82]} scale={0.46} leader /> : null}
     </group>
   );
 }
 
-function Commander({ color }: { color: string }) {
-  return (
-    <group position={[0, 0.02, -0.62]} scale={1.05}>
-      <mesh position={[0, 0.22, 0]}>
-        <cylinderGeometry args={[0.1, 0.13, 0.38, 8]} />
-        <meshStandardMaterial color={color} roughness={0.58} />
-      </mesh>
-      <mesh position={[0, 0.5, 0]}>
-        <sphereGeometry args={[0.09, 10, 8]} />
-        <meshStandardMaterial color="#ead7b2" roughness={0.58} />
-      </mesh>
-      <mesh position={[0, 0.62, 0]}>
-        <coneGeometry args={[0.12, 0.18, 8]} />
-        <meshStandardMaterial color="#f2d36a" roughness={0.5} />
-      </mesh>
-      <mesh position={[-0.13, 0.28, 0.03]} rotation={[Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[0.12, 8]} />
-        <meshStandardMaterial color="#f4edd6" roughness={0.5} />
-      </mesh>
-    </group>
-  );
-}
-
-function Unit({
+function Soldier({
   color,
-  faction,
-  kind,
   position,
+  rotation = 0,
+  scale = 0.38,
+  leader = false,
 }: {
   color: string;
-  faction: Faction;
-  kind: UnitKind;
   position: [number, number, number];
+  rotation?: number;
+  scale?: number;
+  leader?: boolean;
 }) {
-  if (kind === "cavalry") {
-    return <Cavalry color={color} position={position} />;
-  }
-
   return (
-    <group position={position} scale={0.72}>
-      <mesh position={[0, 0.2, 0]}>
-        <cylinderGeometry args={[0.08, 0.115, 0.32, 8]} />
-        <meshStandardMaterial color={color} roughness={0.62} />
-      </mesh>
-      <mesh position={[0, 0.4, 0]}>
-        <sphereGeometry args={[0.075, 10, 8]} />
-        <meshStandardMaterial color="#ead7b2" roughness={0.6} />
-      </mesh>
-      <mesh position={[0, 0.49, 0]}>
-        <coneGeometry args={[0.08, 0.11, 8]} />
-        <meshStandardMaterial color={color} roughness={0.58} />
-      </mesh>
-      {kind === "archer" ? <Bow /> : <Spear />}
-      <ShieldPlate color={color} faction={faction} />
-    </group>
-  );
-}
-
-function Cavalry({ color, position }: { color: string; position: [number, number, number] }) {
-  return (
-    <group position={position} scale={0.94}>
-      <mesh position={[0, 0.16, 0]} scale={[0.38, 0.14, 0.2]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#8a6a47" roughness={0.78} />
-      </mesh>
-      <mesh position={[0.27, 0.24, -0.02]} scale={[0.14, 0.11, 0.11]}>
-        <boxGeometry args={[1, 1, 1]} />
-        <meshStandardMaterial color="#8a6a47" roughness={0.78} />
-      </mesh>
-      {[-0.18, 0.18].map((x) => (
-        <mesh key={x} position={[x, 0.03, 0.08]}>
-          <cylinderGeometry args={[0.035, 0.035, 0.12, 8]} />
-          <meshStandardMaterial color="#3a2a1d" roughness={0.82} />
+    <group position={position} rotation={[0, rotation, 0]}>
+      <KenneyModel url={`${arenaAssetPath}character-soldier.glb`} scale={leader ? scale * 1.25 : scale} tint={color} tintStrength={0.5} />
+      {leader ? (
+        <mesh position={[0, 0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+          <ringGeometry args={[0.12, 0.16, 18]} />
+          <meshBasicMaterial color="#ffe784" transparent opacity={0.95} />
         </mesh>
-      ))}
-      <mesh position={[0, 0.37, 0]}>
-        <cylinderGeometry args={[0.07, 0.09, 0.24, 8]} />
-        <meshStandardMaterial color={color} roughness={0.62} />
-      </mesh>
-      <mesh position={[0, 0.54, 0]}>
-        <sphereGeometry args={[0.065, 10, 8]} />
-        <meshStandardMaterial color="#ead7b2" roughness={0.6} />
-      </mesh>
-      <mesh position={[0.1, 0.43, -0.05]} rotation={[0.2, 0, -0.55]}>
-        <cylinderGeometry args={[0.01, 0.01, 0.42, 6]} />
-        <meshStandardMaterial color={darkWood} roughness={0.8} />
-      </mesh>
+      ) : null}
     </group>
-  );
-}
-
-function Bow() {
-  return (
-    <group position={[0.12, 0.27, -0.02]} rotation={[0, 0, -0.25]}>
-      <mesh position={[0.02, 0.04, 0]} rotation={[0, 0, 0.35]}>
-        <boxGeometry args={[0.018, 0.24, 0.018]} />
-        <meshStandardMaterial color={darkWood} roughness={0.78} />
-      </mesh>
-      <mesh position={[0.08, 0.01, 0]} rotation={[0, 0, -0.35]}>
-        <boxGeometry args={[0.018, 0.22, 0.018]} />
-        <meshStandardMaterial color={darkWood} roughness={0.78} />
-      </mesh>
-      <mesh position={[0.02, 0, 0]} rotation={[0, 0, -0.55]}>
-        <cylinderGeometry args={[0.006, 0.006, 0.28, 6]} />
-        <meshStandardMaterial color="#f5ead0" roughness={0.55} />
-      </mesh>
-    </group>
-  );
-}
-
-function Spear() {
-  return (
-    <group position={[0.1, 0.3, -0.02]} rotation={[0.1, 0, -0.45]}>
-      <mesh>
-        <cylinderGeometry args={[0.01, 0.01, 0.42, 6]} />
-        <meshStandardMaterial color={darkWood} roughness={0.8} />
-      </mesh>
-      <mesh position={[0, 0.24, 0]}>
-        <coneGeometry args={[0.035, 0.09, 6]} />
-        <meshStandardMaterial color="#b6b2a2" roughness={0.55} />
-      </mesh>
-    </group>
-  );
-}
-
-function ShieldPlate({ color, faction }: { color: string; faction: Faction }) {
-  const shape = faction === "yellow" ? 4 : faction === "green" ? 6 : 8;
-  return (
-    <mesh position={[-0.08, 0.27, 0.05]} rotation={[Math.PI / 2, 0, 0]}>
-      <circleGeometry args={[0.075, shape]} />
-      <meshStandardMaterial color={color} roughness={0.55} />
-    </mesh>
   );
 }
 
