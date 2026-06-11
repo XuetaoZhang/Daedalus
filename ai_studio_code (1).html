@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daedalus | Agentic 3D World Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;700;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #FBFBFB;
+            color: #121212;
+            overflow-x: hidden;
+        }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+        .hero-title { font-weight: 800; letter-spacing: -0.05em; line-height: 0.9; }
+        .glass { background: rgba(255, 255, 255, 0.7); backdrop-filter: blur(10px); }
+        .border-thin { border: 1px solid rgba(0,0,0,0.06); }
+        .workflow-card:hover { transform: translateY(-4px); transition: all 0.3s ease; }
+        
+        /* 模拟3D场景的呼吸感 */
+        #canvas-container {
+            mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+        }
+
+        .step-active { color: #121212; border-left: 2px solid #121212; padding-left: 1rem; }
+        .step-inactive { color: #A3A3A3; padding-left: calc(1rem + 2px); }
+
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body>
+
+    <!-- 全局导航 -->
+    <nav class="fixed top-0 w-full z-50 glass border-b border-thin px-8 py-4 flex justify-between items-center">
+        <div class="flex items-center gap-2">
+            <div class="w-8 h-8 bg-black rotate-45 flex items-center justify-center">
+                <div class="w-4 h-4 bg-white rotate-45"></div>
+            </div>
+            <span class="text-xl font-bold tracking-tighter">DAEDALUS</span>
+        </div>
+        <div class="flex gap-8 text-sm font-medium">
+            <a href="#" onclick="showPage('home')" class="hover:opacity-50">Home</a>
+            <a href="#" onclick="showPage('studio')" class="hover:opacity-50">Studio</a>
+        </div>
+        <button onclick="showPage('studio')" class="bg-black text-white px-6 py-2 text-sm font-bold hover:bg-neutral-800 transition-all">
+            ENTER STUDIO
+        </button>
+    </nav>
+
+    <!-- 主容器 -->
+    <main class="pt-20">
+        
+        <!-- HOME 页面 -->
+        <div id="home-page" class="page-content">
+            <!-- Hero Section -->
+            <section class="relative h-[90vh] flex flex-col justify-center px-12 overflow-hidden">
+                <div class="z-10 max-w-4xl">
+                    <p class="text-xs font-bold tracking-widest mb-4 opacity-40 uppercase">Agentic 3D World Builder for Web3</p>
+                    <h1 class="hero-title text-[120px] mb-8">BUILD WORLDS.<br>NOT SLIDES.</h1>
+                    <p class="text-xl text-neutral-500 max-w-xl mb-10 leading-relaxed">
+                        Daedalus turns Web3 briefs into navigable, validated, deployable 3D worlds with a GLM-5.1 agent workflow.
+                    </p>
+                    <div class="flex gap-4">
+                        <button onclick="showPage('studio')" class="bg-black text-white px-8 py-4 text-sm font-bold flex items-center gap-2">
+                            GET STARTED <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                        <button class="border border-black px-8 py-4 text-sm font-bold">WATCH DEMO</button>
+                    </div>
+                </div>
+
+                <!-- Stats -->
+                <div class="absolute bottom-12 left-12 flex gap-16">
+                    <div>
+                        <p class="text-3xl font-bold">120+</p>
+                        <p class="text-[10px] uppercase tracking-widest opacity-40">Worlds Generated</p>
+                    </div>
+                    <div>
+                        <p class="text-3xl font-bold">3,000+</p>
+                        <p class="text-[10px] uppercase tracking-widest opacity-40">Scene Elements</p>
+                    </div>
+                    <div>
+                        <p class="text-3xl font-bold">450+</p>
+                        <p class="text-[10px] uppercase tracking-widest opacity-40">Reusable Models</p>
+                    </div>
+                </div>
+
+                <!-- 背景 3D 占位 (用Three.js渲染) -->
+                <div id="hero-canvas" class="absolute top-0 right-0 w-1/2 h-full -z-10"></div>
+            </section>
+
+            <!-- Workflow Section -->
+            <section class="px-12 py-32 bg-white">
+                <h2 class="text-sm font-bold tracking-widest mb-16 opacity-40 uppercase text-center">GLM-5.1 Long-Horizon Workflow</h2>
+                <div class="grid grid-cols-3 gap-8 max-w-7xl mx-auto">
+                    <!-- Cards -->
+                    <div class="workflow-card border-thin p-8 bg-[#FBFBFB]">
+                        <span class="mono text-xs opacity-30">01</span>
+                        <h3 class="text-lg font-bold mt-4 mb-2">Interpret Brief</h3>
+                        <p class="text-sm text-neutral-400">Agent analyzes Web3 requirements and community identity.</p>
+                    </div>
+                    <div class="workflow-card border-thin p-8 bg-[#FBFBFB]">
+                        <span class="mono text-xs opacity-30">02</span>
+                        <h3 class="text-lg font-bold mt-4 mb-2">Plan Layout</h3>
+                        <p class="text-sm text-neutral-400">Spatial optimization for booths, stages, and galleries.</p>
+                    </div>
+                    <div class="workflow-card border-thin p-8 bg-[#FBFBFB]">
+                        <span class="mono text-xs opacity-30">03</span>
+                        <h3 class="text-lg font-bold mt-4 mb-2">Generate Spec</h3>
+                        <p class="text-sm text-neutral-400">Creation of structured Three.js scene schemas.</p>
+                    </div>
+                    <div class="workflow-card border-thin p-8 bg-[#FBFBFB]">
+                        <span class="mono text-xs opacity-30">04</span>
+                        <h3 class="text-lg font-bold mt-4 mb-2">Render Inspect</h3>
+                        <p class="text-sm text-neutral-400">Automated browser-based validation and visual check.</p>
+                    </div>
+                    <div class="workflow-card border-thin p-8 bg-[#FBFBFB]">
+                        <span class="mono text-xs opacity-30">05</span>
+                        <h3 class="text-lg font-bold mt-4 mb-2">Repair & Optimize</h3>
+                        <p class="text-sm text-neutral-400">Self-correction of geometry and asset issues.</p>
+                    </div>
+                    <div class="workflow-card border-thin p-8 bg-[#FBFBFB]">
+                        <span class="mono text-xs opacity-30">06</span>
+                        <h3 class="text-lg font-bold mt-4 mb-2">Export Pack</h3>
+                        <p class="text-sm text-neutral-400">Deployable bundle with execution trace logs.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- STUDIO 页面 -->
+        <div id="studio-page" class="page-content hidden h-[calc(100vh-80px)] p-6">
+            <div class="grid grid-cols-12 h-full gap-6">
+                
+                <!-- 左侧：Prompt 面板 -->
+                <div class="col-span-3 flex flex-col gap-6">
+                    <div class="glass border-thin p-6 flex-1 flex flex-col">
+                        <h2 class="text-xs font-bold tracking-widest mb-6 opacity-40 uppercase">Prompt Composer</h2>
+                        <textarea id="promptInput" class="w-full flex-1 bg-transparent border-none outline-none resize-none text-sm leading-relaxed" placeholder="Describe your Web3 world (e.g. A futuristic Hackathon arena with 10 sponsor booths and a DAO gallery...)"></textarea>
+                        
+                        <div class="mt-6 space-y-4">
+                            <div>
+                                <label class="text-[10px] font-bold opacity-30 uppercase block mb-2">Scene Type</label>
+                                <select class="w-full bg-neutral-100 border-none p-3 text-xs font-bold outline-none">
+                                    <option>Hackathon Arena</option>
+                                    <option>DAO Hall</option>
+                                    <option>NFT Gallery</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="text-[10px] font-bold opacity-30 uppercase block mb-2">Theme</label>
+                                <div class="flex gap-2">
+                                    <button class="w-8 h-8 rounded-full bg-black border-2 border-white ring-1 ring-black"></button>
+                                    <button class="w-8 h-8 rounded-full bg-neutral-200"></button>
+                                    <button class="w-8 h-8 rounded-full bg-neutral-400"></button>
+                                </div>
+                            </div>
+                            <button onclick="runAgent()" id="genBtn" class="w-full bg-black text-white py-4 text-sm font-bold mt-4 flex justify-center items-center gap-2">
+                                GENERATE WORLD <i data-lucide="sparkles" class="w-4 h-4"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 右侧：工作流 + 预览 -->
+                <div class="col-span-9 grid grid-rows-2 gap-6">
+                    
+                    <!-- 右上：Agent Workflow -->
+                    <div class="glass border-thin p-6 overflow-hidden flex flex-col">
+                        <div class="flex justify-between items-center mb-6">
+                            <h2 class="text-xs font-bold tracking-widest opacity-40 uppercase">Agent Workflow & Validation</h2>
+                            <div id="agentStatus" class="mono text-[10px] px-2 py-1 bg-neutral-100 rounded text-neutral-400 uppercase">Idle</div>
+                        </div>
+                        <div id="workflowLogs" class="flex-1 overflow-y-auto no-scrollbar space-y-4">
+                            <div class="step-inactive text-sm mono flex items-center gap-3">
+                                <span class="w-2 h-2 rounded-full bg-neutral-200"></span>
+                                Waiting for input...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 右下：3D Preview -->
+                    <div class="glass border-thin relative overflow-hidden group">
+                        <div class="absolute top-4 left-4 z-10 flex gap-2">
+                            <div class="glass px-3 py-1 border-thin text-[10px] font-bold uppercase">Viewport: Three.js WebGL</div>
+                            <div id="renderStatus" class="glass px-3 py-1 border-thin text-[10px] font-bold uppercase text-neutral-400">Static</div>
+                        </div>
+                        <div id="preview-canvas" class="w-full h-full bg-neutral-50"></div>
+                        
+                        <!-- 覆盖层：产物导出 -->
+                        <div class="absolute bottom-4 right-4 z-10 hidden" id="artifactBtn">
+                            <button class="glass px-4 py-2 border-thin text-[10px] font-bold uppercase flex items-center gap-2 hover:bg-black hover:text-white transition-all">
+                                <i data-lucide="download" class="w-3 h-3"></i> Export Scene Bundle
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // 初始化 Lucide 图标
+        lucide.createIcons();
+
+        // 页面切换逻辑
+        function showPage(pageId) {
+            document.querySelectorAll('.page-content').forEach(p => p.classList.add('hidden'));
+            document.getElementById(pageId + '-page').classList.remove('hidden');
+            if(pageId === 'studio') {
+                window.dispatchEvent(new Event('resize')); // 强制重绘3D
+            }
+        }
+
+        // --- 核心 3D 逻辑 (Three.js) ---
+        let scene, camera, renderer, cube;
+        function init3D(containerId) {
+            const container = document.getElementById(containerId);
+            scene = new THREE.Scene();
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setClearColor(0x000000, 0);
+            container.appendChild(renderer.domElement);
+
+            // 前卫感灯光
+            const light = new THREE.DirectionalLight(0xffffff, 1);
+            light.position.set(5, 10, 7.5);
+            scene.add(light);
+            scene.add(new THREE.AmbientLight(0x404040, 2));
+
+            // 创建一些建筑几何体占位
+            const geometry = new THREE.BoxGeometry(2, 0.2, 2);
+            const material = new THREE.MeshPhysicalMaterial({ color: 0xeeeeee, roughness: 0.1, metalness: 0 });
+            cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+
+            // 装饰性网格
+            const grid = new THREE.GridHelper(20, 20, 0x000000, 0xeeeeee);
+            grid.position.y = -1;
+            scene.add(grid);
+
+            camera.position.z = 5;
+            camera.position.y = 2;
+            camera.lookAt(0,0,0);
+
+            function animate() {
+                requestAnimationFrame(animate);
+                cube.rotation.y += 0.002;
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        init3D('hero-canvas');
+        init3D('preview-canvas');
+
+        // --- Agent 工作流模拟逻辑 ---
+        async function runAgent() {
+            const prompt = document.getElementById('promptInput').value;
+            if(!prompt) return alert("Please enter a prompt.");
+
+            const logs = document.getElementById('workflowLogs');
+            const status = document.getElementById('agentStatus');
+            const btn = document.getElementById('genBtn');
+            const renderStatus = document.getElementById('renderStatus');
+            
+            btn.disabled = true;
+            btn.innerHTML = `PROCESSING...`;
+            logs.innerHTML = '';
+            status.innerText = "Active";
+            status.classList.add('bg-black', 'text-white');
+
+            const steps = [
+                { msg: "Analyzing Web3 brief and community requirements...", delay: 1000 },
+                { msg: "Planning spatial layout: Allocating 12 zones for booths...", delay: 1500 },
+                { msg: "Generating Scene Spec (JSON Schema)...", delay: 1200 },
+                { msg: "Validator: Checking geometry collision...", delay: 800 },
+                { msg: "Error Detected: Overlapping Booth_04 and Booth_05.", delay: 1000, error: true },
+                { msg: "Agent Self-Repair: Adjusting spatial coordinates...", delay: 1500 },
+                { msg: "Finalizing 3D World bundle and assets.", delay: 1000 }
+            ];
+
+            for (const step of steps) {
+                const div = document.createElement('div');
+                div.className = "step-active text-sm mono flex items-center gap-3 animate-pulse";
+                div.innerHTML = `<span class="w-2 h-2 rounded-full ${step.error ? 'bg-red-500' : 'bg-black'}"></span> ${step.msg}`;
+                logs.appendChild(div);
+                logs.scrollTop = logs.scrollHeight;
+                
+                if(step.msg.includes("Adjusting")) {
+                    // 模拟3D更新
+                    cube.scale.set(1.5, 1, 1.5);
+                    cube.material.color.setHex(0xffffff);
+                    renderStatus.innerText = "UPDATING...";
+                    renderStatus.classList.add('text-black');
+                }
+
+                await new Promise(r => setTimeout(r, step.delay));
+                div.classList.remove('animate-pulse');
+            }
+
+            status.innerText = "Complete";
+            renderStatus.innerText = "Live / Validated";
+            btn.disabled = false;
+            btn.innerHTML = `GENERATE WORLD <i data-lucide="sparkles" class="w-4 h-4"></i>`;
+            document.getElementById('artifactBtn').classList.remove('hidden');
+            lucide.createIcons();
+        }
+
+        // 响应式处理
+        window.addEventListener('resize', () => {
+            const containers = ['hero-canvas', 'preview-canvas'];
+            containers.forEach(id => {
+                const c = document.getElementById(id);
+                if(renderer && camera) {
+                    renderer.setSize(c.clientWidth, c.clientHeight);
+                    camera.aspect = c.clientWidth / c.clientHeight;
+                    camera.updateProjectionMatrix();
+                }
+            });
+        });
+    </script>
+</body>
+</html>
