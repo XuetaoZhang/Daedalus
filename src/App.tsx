@@ -258,10 +258,14 @@ function SceneCanvas({
   className,
   cameraTarget,
   zoomRange,
+  backgroundColor = "#efe4ca",
+  fogColor = "#efe4ca",
 }: {
   className: string;
   cameraTarget: [number, number, number];
   zoomRange: [number, number];
+  backgroundColor?: string;
+  fogColor?: string;
 }) {
   return (
     <div className={className}>
@@ -271,8 +275,8 @@ function SceneCanvas({
         onCreated={({ camera }) => camera.lookAt(...cameraTarget)}
         shadows
       >
-        <color attach="background" args={["#efe4ca"]} />
-        <fog attach="fog" args={["#efe4ca", 12, 24]} />
+        <color attach="background" args={[backgroundColor]} />
+        <fog attach="fog" args={[fogColor, 12, 24]} />
         <ambientLight intensity={1.45} />
         <directionalLight
           castShadow
