@@ -1,4 +1,4 @@
-import { Canvas } from "@react-three/fiber";
+import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import {
   ArrowRight,
@@ -8,7 +8,8 @@ import {
   Download,
   Sparkles,
 } from "lucide-react";
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import * as THREE from "three";
 import { demoSceneSpec } from "./world/demoSceneSpec";
 import { GameStyleWorld } from "./world/GameStyleWorld";
 import { runMockAgentWorkflow } from "./agent/mockWorkflow";
@@ -59,10 +60,24 @@ const promptPresets = [
 export function App() {
   const [activePage, setActivePage] = useState<PageTab>("home");
   const [prompt, setPrompt] = useState(promptPresets[0]);
+  const [isHomeNavSolid, setIsHomeNavSolid] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const nextSolid = window.scrollY >= 56;
+      setIsHomeNavSolid((current) => (current === nextSolid ? current : nextSolid));
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  const navClassName =
+    activePage === "home" && !isHomeNavSolid ? "global-nav is-transparent" : "global-nav is-solid";
 
   return (
-    <main className="site-shell">
-      <header className="global-nav">
+    <main className="site-shell" data-page={activePage}>
+      <header className={navClassName}>
         <button className="brand-lockup" onClick={() => setActivePage("home")}>
           <span className="brand-mark" aria-hidden="true">
             <span className="brand-mark-core" />
@@ -123,7 +138,12 @@ function HomePage({ onEnterStudio }: { onEnterStudio: () => void }) {
         </div>
 
         <div className="hero-scene">
-          <SceneCanvas className="hero-canvas" cameraTarget={[0, 0, 0.2]} zoomRange={[40, 78]} />
+          <SceneCanvas
+            className="hero-canvas"
+            cameraTarget={[0.4, 0, 1.15]}
+            zoomRange={[50, 84]}
+            mode="hero"
+          />
         </div>
       </section>
 
@@ -241,7 +261,12 @@ function StudioPage({
               </div>
             </div>
             <div className="preview-stage">
-              <SceneCanvas className="studio-canvas" cameraTarget={[0, 0, 0.2]} zoomRange={[42, 72]} />
+              <SceneCanvas
+                className="studio-canvas"
+                cameraTarget={[0, 0, 0.2]}
+                zoomRange={[42, 72]}
+                mode="studio"
+              />
               <button className="export-button">
                 <Download size={14} />
                 Export Scene Bundle
@@ -257,29 +282,39 @@ function StudioPage({
 function SceneCanvas({
   className,
   cameraTarget,
+  mode,
   zoomRange,
   backgroundColor = "#efe4ca",
   fogColor = "#efe4ca",
 }: {
   className: string;
   cameraTarget: [number, number, number];
+  mode: "hero" | "studio";
   zoomRange: [number, number];
   backgroundColor?: string;
   fogColor?: string;
 }) {
+  const cameraSettings = useMemo(
+    () =>
+      mode === "hero"
+        ? { position: [0.9, 10.1, 6.95] as [number, number, number], zoom: 61 }
+        : { position: [0, 11.5, 8.4] as [number, number, number], zoom: 52 },
+    [mode],
+  );
+
   return (
     <div className={className}>
       <Canvas
         orthographic
-        camera={{ position: [0, 11.5, 8.4], zoom: 52, near: 0.1, far: 80 }}
+        camera={{ position: cameraSettings.position, zoom: cameraSettings.zoom, near: 0.1, far: 80 }}
         onCreated={({ camera }) => camera.lookAt(...cameraTarget)}
-        shadows
+        shadows={mode === "studio"}
       >
         <color attach="background" args={[backgroundColor]} />
         <fog attach="fog" args={[fogColor, 12, 24]} />
         <ambientLight intensity={1.45} />
         <directionalLight
-          castShadow
+          castShadow={mode === "studio"}
           position={[-5, 8, 5]}
           intensity={2.15}
           shadow-mapSize-width={2048}
@@ -289,17 +324,76 @@ function SceneCanvas({
         <Suspense fallback={null}>
           <GameStyleWorld />
         </Suspense>
-        <OrbitControls
-          enablePan={false}
-          minZoom={zoomRange[0]}
-          maxZoom={zoomRange[1]}
-          maxPolarAngle={Math.PI / 2.35}
-          minPolarAngle={Math.PI / 5}
-          target={cameraTarget}
-        />
+        {mode === "hero" ? <HeroCameraRig baseTarget={cameraTarget} /> : null}
+        {mode === "studio" ? (
+          <OrbitControls
+            enablePan={false}
+            enableRotate
+            enableZoom
+            minZoom={zoomRange[0]}
+            maxZoom={zoomRange[1]}
+            maxPolarAngle={Math.PI / 2.35}
+            minPolarAngle={Math.PI / 5}
+            target={cameraTarget}
+          />
+        ) : null}
       </Canvas>
     </div>
   );
+}
+
+function HeroCameraRig({ baseTarget }: { baseTarget: [number, number, number] }) {
+  const { camera } = useThree();
+  const desiredPosition = useMemo(() => new THREE.Vector3(), []);
+  const desiredTarget = useMemo(() => new THREE.Vector3(), []);
+  const liveTarget = useMemo(() => new THREE.Vector3(...baseTarget), [baseTarget]);
+  const targetScrollRef = useRef(0);
+  const smoothedScrollRef = useRef(0);
+
+  useEffect(() => {
+    const onScroll = () => {
+      targetScrollRef.current = window.scrollY;
+    };
+
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useFrame((state, delta) => {
+    if (!(camera instanceof THREE.OrthographicCamera)) return;
+
+    const t = state.clock.elapsedTime;
+    smoothedScrollRef.current = THREE.MathUtils.damp(
+      smoothedScrollRef.current,
+      targetScrollRef.current,
+      4.8,
+      delta,
+    );
+    const scroll = THREE.MathUtils.clamp(smoothedScrollRef.current / 640, 0, 1.1);
+    const driftX = Math.sin(t * 0.16) * 0.46;
+    const driftZ = Math.cos(t * 0.21) * 0.28;
+    const smooth = 1 - Math.exp(-delta * 2.1);
+
+    desiredPosition.set(
+      0.82 + driftX * 0.68 + scroll * 0.24,
+      10.05 - scroll * 0.1,
+      6.9 + driftZ * 0.58 - scroll * 0.1,
+    );
+    desiredTarget.set(
+      baseTarget[0] + driftX * 0.24 + scroll * 0.16,
+      baseTarget[1],
+      baseTarget[2] + driftZ * 0.35 + scroll * 0.08,
+    );
+
+    camera.position.lerp(desiredPosition, smooth);
+    liveTarget.lerp(desiredTarget, smooth);
+    camera.zoom = THREE.MathUtils.lerp(camera.zoom, 61.5 + Math.sin(t * 0.18) * 0.8 + scroll * 2.1, smooth);
+    camera.lookAt(liveTarget);
+    camera.updateProjectionMatrix();
+  });
+
+  return null;
 }
 
 function StatValue({ value, label }: { value: string; label: string }) {

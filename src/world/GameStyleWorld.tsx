@@ -1,5 +1,6 @@
+import { useFrame } from "@react-three/fiber";
 import { useGLTF } from "@react-three/drei";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import * as THREE from "three";
 
 const ground = "#d8cb9b";
@@ -53,6 +54,96 @@ function KenneyModel({ url, position = [0, 0, 0], rotation = [0, 0, 0], scale = 
   return <primitive object={scene} position={position} rotation={rotation} scale={scale} />;
 }
 
+function useFloatMotion({
+  amplitude = 0.08,
+  frequency = 1,
+  phase = 0,
+  rotationAmplitude = 0.05,
+}: {
+  amplitude?: number;
+  frequency?: number;
+  phase?: number;
+  rotationAmplitude?: number;
+}) {
+  const ref = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime * frequency + phase;
+    ref.current.position.y = Math.sin(t) * amplitude;
+    ref.current.rotation.z = Math.sin(t * 0.8) * rotationAmplitude;
+  });
+
+  return ref;
+}
+
+function usePulseScale({
+  base = 1,
+  amplitude = 0.1,
+  frequency = 1,
+  phase = 0,
+}: {
+  base?: number;
+  amplitude?: number;
+  frequency?: number;
+  phase?: number;
+}) {
+  const ref = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime * frequency + phase;
+    const scale = base + Math.sin(t) * amplitude;
+    ref.current.scale.setScalar(scale);
+  });
+
+  return ref;
+}
+
+function useMarchMotion({
+  phase = 0,
+  stride = 0.1,
+  lift = 0.025,
+}: {
+  phase?: number;
+  stride?: number;
+  lift?: number;
+}) {
+  const ref = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime * 1.9 + phase;
+    ref.current.position.x = Math.sin(t) * stride;
+    ref.current.position.z = Math.cos(t * 0.9) * stride * 0.65;
+    ref.current.position.y = Math.max(0, Math.sin(t * 2)) * lift;
+    ref.current.rotation.y = Math.sin(t) * 0.08;
+  });
+
+  return ref;
+}
+
+function useFormationPatrol({
+  xAmplitude = 0.14,
+  zAmplitude = 0.18,
+  phase = 0,
+}: {
+  xAmplitude?: number;
+  zAmplitude?: number;
+  phase?: number;
+}) {
+  const ref = useRef<THREE.Group>(null);
+
+  useFrame((state) => {
+    if (!ref.current) return;
+    const t = state.clock.elapsedTime * 0.6 + phase;
+    ref.current.position.x = Math.sin(t) * xAmplitude;
+    ref.current.position.z = Math.cos(t * 1.15) * zAmplitude;
+  });
+
+  return ref;
+}
+
 export function GameStyleWorld() {
   return (
     <group rotation={[0, -0.08, 0]} position={[0, -0.2, 0]}>
@@ -94,29 +185,10 @@ function GameBoard() {
       </mesh>
       <mesh position={[0, 0.02, 0]} receiveShadow>
         <cylinderGeometry args={[6.95, 6.95, 0.18, 128]} />
-        <meshStandardMaterial color={ground} roughness={0.82} />
+        <meshBasicMaterial color={ground} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.13, 0]}>
-        <ringGeometry args={[6.25, 6.35, 128]} />
-        <meshBasicMaterial color="#f7edcf" transparent opacity={0.6} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.16, 0]}>
-        <circleGeometry args={[6.82, 128]} />
-        <meshBasicMaterial color="#efe2ba" transparent opacity={0.16} />
-      </mesh>
-      {Array.from({ length: 32 }, (_, index) => (
-        <mesh key={index} rotation={[-Math.PI / 2, 0, 0]} position={radialTickPosition(index)}>
-          <boxGeometry args={[0.04, 0.28, 0.01]} />
-          <meshBasicMaterial color="#d1bd80" transparent opacity={0.32} />
-        </mesh>
-      ))}
     </group>
   );
-}
-
-function radialTickPosition(index: number): [number, number, number] {
-  const angle = (index / 32) * Math.PI * 2;
-  return [Math.cos(angle) * 6.58, 0.18, Math.sin(angle) * 6.58];
 }
 
 function River() {
@@ -304,8 +376,15 @@ function SmallCastleKit({ color }: { color: string }) {
 }
 
 function AssetBanner({ position, color, scale = 0.24 }: { position: [number, number, number]; color: string; scale?: number }) {
+  const motionRef = useFloatMotion({
+    amplitude: 0.06,
+    frequency: 1.25,
+    phase: position[0] * 0.8 + position[2] * 0.45,
+    rotationAmplitude: 0.08,
+  });
+
   return (
-    <group position={position}>
+    <group position={position} ref={motionRef}>
       <KenneyModel url={`${arenaAssetPath}banner.glb`} scale={scale} tint={color} tintStrength={0.55} />
     </group>
   );
@@ -469,6 +548,12 @@ function ArmyCluster({
   rows: number;
   lead?: boolean;
 }) {
+  const patrolRef = useFormationPatrol({
+    xAmplitude: lead ? 0.08 : 0.14,
+    zAmplitude: lead ? 0.16 : 0.22,
+    phase: position[0] * 0.5 + position[2] * 0.4,
+  });
+
   const units = Array.from({ length: rows * 5 }, (_, index) => {
     const row = Math.floor(index / 5);
     const col = index % 5;
@@ -479,15 +564,24 @@ function ArmyCluster({
 
   return (
     <group position={position}>
+      <group ref={patrolRef}>
       <mesh position={[0, -0.015, 0.03]} rotation={[-Math.PI / 2, 0, 0]}>
         <circleGeometry args={[lead ? 1.24 : 0.95, 32]} />
         <meshBasicMaterial color={color} transparent opacity={lead ? 0.2 : 0.14} />
       </mesh>
       {units.map((unit, index) => (
-        <Soldier key={index} color={color} position={[unit.position[0], 0, unit.position[1]]} rotation={index % 2 === 0 ? 0.18 : -0.18} />
+        <Soldier
+          key={index}
+          color={color}
+          position={[unit.position[0], 0, unit.position[1]]}
+          rotation={index % 2 === 0 ? 0.18 : -0.18}
+          phase={index * 0.5 + position[0] * 0.3}
+          stride={lead ? 0.05 : 0.08}
+        />
       ))}
       <AssetBanner position={[0, lead ? 1.12 : 0.92, -0.42]} color={color} scale={lead ? 0.22 : 0.18} />
-      {lead ? <Soldier color={color} position={[0, 0.02, -0.82]} scale={0.46} leader /> : null}
+      {lead ? <Soldier color={color} position={[0, 0.02, -0.82]} scale={0.46} leader phase={9.5} stride={0.08} /> : null}
+      </group>
     </group>
   );
 }
@@ -498,16 +592,24 @@ function Soldier({
   rotation = 0,
   scale = 0.38,
   leader = false,
+  phase = 0,
+  stride = 0.08,
 }: {
   color: string;
   position: [number, number, number];
   rotation?: number;
   scale?: number;
   leader?: boolean;
+  phase?: number;
+  stride?: number;
 }) {
+  const marchRef = useMarchMotion({ phase, stride, lift: leader ? 0.038 : 0.024 });
+
   return (
     <group position={position} rotation={[0, rotation, 0]}>
-      <KenneyModel url={`${arenaAssetPath}character-soldier.glb`} scale={leader ? scale * 1.25 : scale} tint={color} tintStrength={0.5} />
+      <group ref={marchRef}>
+        <KenneyModel url={`${arenaAssetPath}character-soldier.glb`} scale={leader ? scale * 1.25 : scale} tint={color} tintStrength={0.5} />
+      </group>
       {leader ? (
         <mesh position={[0, 0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.12, 0.16, 18]} />
@@ -536,12 +638,42 @@ function MarchPath({ points, color }: { points: Vec2[]; color: string }) {
   return (
     <group>
       {dots.map(([x, z], index) => (
-        <mesh key={index} position={[x, 0.44, z]} rotation={[0, -angle, 0]}>
-          <boxGeometry args={[0.13, 0.035, 0.09]} />
-          <meshBasicMaterial color={color} transparent opacity={0.85} />
-        </mesh>
+        <MarchDot key={index} angle={angle} color={color} index={index} position={[x, 0.44, z]} />
       ))}
-      <mesh position={[last[0], 0.45, last[1]]} rotation={[0, -angle - Math.PI / 2, 0]}>
+      <MarchArrow angle={angle} color={color} position={[last[0], 0.45, last[1]]} />
+    </group>
+  );
+}
+
+function MarchDot({
+  angle,
+  color,
+  index,
+  position,
+}: {
+  angle: number;
+  color: string;
+  index: number;
+  position: [number, number, number];
+}) {
+  const pulseRef = usePulseScale({ base: 1, amplitude: 0.18, frequency: 2, phase: index * 0.33 });
+
+  return (
+    <group ref={pulseRef} position={position} rotation={[0, -angle, 0]}>
+      <mesh>
+        <boxGeometry args={[0.13, 0.035, 0.09]} />
+        <meshBasicMaterial color={color} transparent opacity={0.85} />
+      </mesh>
+    </group>
+  );
+}
+
+function MarchArrow({ angle, color, position }: { angle: number; color: string; position: [number, number, number] }) {
+  const floatRef = useFloatMotion({ amplitude: 0.025, frequency: 2.2, phase: position[0] * 0.7, rotationAmplitude: 0.02 });
+
+  return (
+    <group ref={floatRef} position={position} rotation={[0, -angle - Math.PI / 2, 0]}>
+      <mesh>
         <coneGeometry args={[0.16, 0.32, 3]} />
         <meshBasicMaterial color={color} transparent opacity={0.95} />
       </mesh>
@@ -550,11 +682,15 @@ function MarchPath({ points, color }: { points: Vec2[]; color: string }) {
 }
 
 function CommandCircle({ position }: { position: [number, number, number] }) {
+  const pulseRef = usePulseScale({ base: 1, amplitude: 0.08, frequency: 1.8, phase: position[0] * 0.2 });
+
   return (
-    <mesh position={position} rotation={[-Math.PI / 2, 0, 0]}>
-      <ringGeometry args={[0.9, 0.96, 64]} />
-      <meshBasicMaterial color="#ffffff" transparent opacity={0.75} />
-    </mesh>
+    <group ref={pulseRef} position={position}>
+      <mesh rotation={[-Math.PI / 2, 0, 0]}>
+        <ringGeometry args={[0.9, 0.96, 64]} />
+        <meshBasicMaterial color="#ffffff" transparent opacity={0.75} />
+      </mesh>
+    </group>
   );
 }
 
