@@ -515,7 +515,7 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
               </div>
             </div>
             <div className="preview-stage">
-              <SceneCanvas className="studio-canvas" cameraTarget={[0, 0, 0]} mode="studio" sceneSpec={snapshot.sceneSpec} zoomRange={[40, 72]} />
+              <SceneCanvas className="studio-canvas" cameraTarget={[0, 0, 0]} mode="studio" sceneSpec={snapshot.sceneSpec} zoomRange={[34, 84]} />
 
               <div className="preview-overlay preview-overlay-top">
                 <span className="overlay-kicker">Current World</span>

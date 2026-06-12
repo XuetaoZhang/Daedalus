@@ -1,6 +1,8 @@
-import { Text, useGLTF } from "@react-three/drei";
-import { useMemo } from "react";
+import { Text, useAnimations, useGLTF } from "@react-three/drei";
+import { useFrame } from "@react-three/fiber";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
 import { buildStudioWorldLayout, type StudioWorldLayout } from "./studioWorldLayout";
 
@@ -71,31 +73,35 @@ const zoneRadiusByType: Record<ZoneSpec["type"], number> = {
   wallet_badge: 1.18,
 };
 
-const HEX_DIRECTIONS: HexCellCoord[] = [
-  { q: 1, r: 0 },
-  { q: 1, r: -1 },
-  { q: 0, r: -1 },
-  { q: -1, r: 0 },
-  { q: -1, r: 1 },
-  { q: 0, r: 1 },
-];
-
 const MODEL_HEX_HEIGHT = 1.154700517654419;
 const MODEL_HEX_SIDE = MODEL_HEX_HEIGHT / 2;
 const BASE_TILE_SCALE = 1.002;
-const OVERLAY_TILE_Y = 0.012;
 
 export function WorldRenderer({ spec }: WorldRendererProps) {
   const palette = paletteByStyle[spec.style];
   const layout = useMemo(() => buildStudioWorldLayout(spec.zones), [spec.zones]);
+  const routeNetwork = useMemo(() => buildRouteNetwork(layout), [layout]);
   const anchorByZoneId = useMemo(
     () => new Map(layout.anchors.map((anchor) => [anchor.zone.id, anchor.position])),
     [layout.anchors],
   );
+  const mainStageAnchor = layout.anchors.find((anchor) => anchor.zone.type === "main_stage");
+  const trackAnchor = layout.anchors.find((anchor) => anchor.zone.type === "track_zone");
 
   return (
     <group>
       <HexTerrain spec={spec} style={spec.style} rim={palette.rim} glow={palette.glow} layout={layout} />
+      <RouteNetwork routeNetwork={routeNetwork} />
+      {mainStageAnchor && trackAnchor ? (
+        <TransitSoldier
+          startPosition={[mainStageAnchor.position[0] + 0.72, 0.24, mainStageAnchor.position[2] + 2.4]}
+          endPosition={[trackAnchor.position[0] - 0.58, 0.24, trackAnchor.position[2] + 1.12]}
+          tint="#FF6B3D"
+          tintStrength={0.9}
+          scale={0.96}
+          speed={0.14}
+        />
+      ) : null}
       {spec.zones.map((zone) => (
         <ZonePrefab key={zone.id} zone={zone} style={spec.style} overridePosition={anchorByZoneId.get(zone.id)} />
       ))}
@@ -180,6 +186,120 @@ function PrefabModel({
   }, [gltf.scene, tint, tintStrength]);
 
   return <primitive object={scene} position={position} rotation={rotation} scale={scale} />;
+}
+
+function AnimatedSoldierModel({
+  position = [0, 0, 0],
+  rotation = [0, 0, 0],
+  scale = 1,
+  tint,
+  tintStrength = 0,
+  clip = "walk",
+}: Omit<ModelProps, "url"> & { clip?: string }) {
+  const gltf = useGLTF(`${arenaAssetPath}character-soldier.glb`);
+  const rootRef = useRef<THREE.Group>(null);
+
+  const scene = useMemo(() => {
+    const clone = cloneSkinned(gltf.scene) as THREE.Group;
+    const tintColor = tint ? new THREE.Color(tint) : null;
+
+    clone.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const nextMaterials = materials.map((material) => {
+        const nextMaterial = material.clone();
+        if (tintColor && "color" in nextMaterial && nextMaterial.color instanceof THREE.Color) {
+          nextMaterial.color.lerp(tintColor, tintStrength);
+        }
+        return nextMaterial;
+      });
+
+      mesh.material = Array.isArray(mesh.material) ? nextMaterials : nextMaterials[0];
+    });
+
+    return clone;
+  }, [gltf.scene, tint, tintStrength]);
+
+  const { actions } = useAnimations(gltf.animations, rootRef);
+
+  useEffect(() => {
+    const requested = actions[clip] ?? actions.walk ?? actions.idle;
+    if (!requested) return;
+
+    requested.reset();
+    requested.fadeIn(0.2);
+    requested.play();
+    requested.timeScale = clip === "walk" ? 1.15 : 1;
+
+    return () => {
+      requested.fadeOut(0.2);
+      requested.stop();
+    };
+  }, [actions, clip]);
+
+  return <primitive ref={rootRef} object={scene} position={position} rotation={rotation} scale={scale} />;
+}
+
+function TransitSoldier({
+  startPosition,
+  endPosition,
+  tint,
+  tintStrength,
+  scale,
+  speed,
+}: {
+  startPosition: [number, number, number];
+  endPosition: [number, number, number];
+  tint: string;
+  tintStrength: number;
+  scale: number;
+  speed: number;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const start = useMemo(() => new THREE.Vector3(...startPosition), [startPosition]);
+  const end = useMemo(() => new THREE.Vector3(...endPosition), [endPosition]);
+  const current = useMemo(() => new THREE.Vector3(), []);
+  const lookAhead = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+
+    const base = (Math.sin(state.clock.elapsedTime * speed * Math.PI * 2) + 1) / 2;
+    const next = (Math.sin((state.clock.elapsedTime + 0.05) * speed * Math.PI * 2) + 1) / 2;
+    const bob = Math.sin(state.clock.elapsedTime * speed * Math.PI * 8) * 0.018;
+
+    current.lerpVectors(start, end, base);
+    lookAhead.lerpVectors(start, end, next);
+
+    groupRef.current.position.set(current.x, current.y + bob, current.z);
+    groupRef.current.rotation.y = Math.atan2(lookAhead.x - current.x, lookAhead.z - current.z + 0.0001);
+  });
+
+  return (
+    <group ref={groupRef}>
+      <AnimatedSoldierModel
+        position={[0, 0, 0]}
+        scale={scale}
+        tint={tint}
+        tintStrength={tintStrength}
+        clip="walk"
+      />
+      <mesh position={[0, 1.5, 0]} renderOrder={30}>
+        <sphereGeometry args={[0.12, 16, 16]} />
+        <meshBasicMaterial color="#FFD056" transparent opacity={0.95} depthWrite={false} />
+      </mesh>
+      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={29}>
+        <ringGeometry args={[0.42, 0.58, 32]} />
+        <meshBasicMaterial color="#FFD056" transparent opacity={0.85} depthWrite={false} />
+      </mesh>
+      <pointLight position={[0, 0.2, 0]} color="#FFD056" intensity={1.4} distance={3.8} />
+    </group>
+  );
 }
 
 function ZonePrefab({
@@ -292,9 +412,9 @@ function PrefabCluster({
           />
           <PrefabModel
             url={`${hexAssetPath}building-walls.glb`}
-            position={[0, 0.19, -0.95]}
+            position={[0, 0.19, -1.18]}
             rotation={[0, Math.PI / 6, 0]}
-            scale={0.72}
+            scale={0.64}
             tint={tint}
             tintStrength={tintStrength * 0.9}
           />
@@ -314,7 +434,6 @@ function PrefabCluster({
             tintStrength={tintStrength * 0.9}
           />
           <BannerPair tint={accent} height={1.38} spread={1.08} />
-          <SoldierLine tint={accent} origin={[0, 0.18, 1.02]} spacing={0.46} count={4} />
         </group>
       );
     case "track_zone":
@@ -547,6 +666,66 @@ function SoldierLine({
   );
 }
 
+type RouteNetworkShape = {
+  pathRoutes: Array<Array<[number, number, number]>>;
+  riverRoute: Array<[number, number, number]>;
+};
+
+function RouteNetwork({ routeNetwork }: { routeNetwork: RouteNetworkShape }) {
+  return (
+    <group>
+      {routeNetwork.pathRoutes.map((route, index) => (
+        <RouteRibbon
+          key={`path-route-${index}`}
+          points={route}
+          y={0.12}
+          width={0.2}
+          color="#7D5731"
+          coreColor="#D7B27A"
+        />
+      ))}
+      <RouteRibbon
+        points={routeNetwork.riverRoute}
+        y={0.1}
+        width={0.26}
+        color="#2B6798"
+        coreColor="#84D8FF"
+      />
+    </group>
+  );
+}
+
+function RouteRibbon({
+  points,
+  y,
+  width,
+  color,
+  coreColor,
+}: {
+  points: Array<[number, number, number]>;
+  y: number;
+  width: number;
+  color: string;
+  coreColor: string;
+}) {
+  return (
+    <>
+      {buildRouteSegments(sampleSmoothPath(points)).map((segment, index) => (
+        <group key={`${color}-${index}`}>
+          <mesh position={[segment.midX, y - 0.004, segment.midZ]} rotation={[0, segment.yaw, 0]} receiveShadow renderOrder={14}>
+            <boxGeometry args={[segment.length, 0.018, width]} />
+            <meshStandardMaterial color={color} roughness={0.94} metalness={0} transparent opacity={0.92} />
+          </mesh>
+          <mesh position={[segment.midX, y + 0.002, segment.midZ]} rotation={[0, segment.yaw, 0]} receiveShadow renderOrder={15}>
+            <boxGeometry args={[segment.length * 0.98, 0.01, width * 0.62]} />
+            <meshStandardMaterial color={coreColor} roughness={0.88} metalness={0} transparent opacity={0.94} />
+          </mesh>
+        </group>
+      ))}
+    </>
+  );
+}
+
 function mixHexColors(a: string, b: string, amount: number) {
   const colorA = new THREE.Color(a);
   const colorB = new THREE.Color(b);
@@ -601,6 +780,21 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle, layout: StudioWor
     addPathToEdgeSet(pathEdges, hexLine(stageAnchor.cell, anchor.cell));
   }
 
+  for (const anchor of zoneAnchors) {
+    const plazaRadius = anchor.zone.type === "main_stage" ? 2 : 1;
+    const route = hexLine(stageAnchor.cell, anchor.cell);
+    const lastRouteCell = route[route.length - 1];
+    if (!lastRouteCell) continue;
+
+    const connectedNeighbor = nearestCellInDisk(lastRouteCell, hexDisk(anchor.cell, plazaRadius), (candidate) =>
+      cellMap.has(hexKey(candidate.q, candidate.r)),
+    );
+
+    if (connectedNeighbor) {
+      pathEdges.add(edgeKey(lastRouteCell, connectedNeighbor));
+    }
+  }
+
   for (const cellKey of edgeCellsFromSet(pathEdges)) {
     if (!plazaCells.has(cellKey) && cellMap.has(cellKey)) {
       pathCells.add(cellKey);
@@ -608,10 +802,11 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle, layout: StudioWor
   }
 
   const riverWaypoints = [
-    nearestExistingCell(cellMap, { q: -Math.max(4, Math.floor(searchRadius * 0.7)), r: 2 }),
-    nearestExistingCell(cellMap, { q: -2, r: 1 }),
-    nearestExistingCell(cellMap, { q: 1, r: -1 }),
-    nearestExistingCell(cellMap, { q: Math.max(4, Math.floor(searchRadius * 0.72)), r: -2 }),
+    nearestExistingCell(cellMap, { q: -Math.max(4, Math.floor(searchRadius * 0.7)), r: 3 }),
+    nearestExistingCell(cellMap, { q: -3, r: 2 }),
+    nearestExistingCell(cellMap, { q: -1, r: 0 }),
+    nearestExistingCell(cellMap, { q: 2, r: -1 }),
+    nearestExistingCell(cellMap, { q: Math.max(4, Math.floor(searchRadius * 0.72)), r: -3 }),
   ];
 
   for (let index = 0; index < riverWaypoints.length - 1; index += 1) {
@@ -671,32 +866,97 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle, layout: StudioWor
       tintStrength,
     });
 
-    if (riverCells.has(cell.key)) {
-      const mask = edgeMask(cell, riverEdges);
-      const riverTile = selectTileFromMask(mask, "river");
-      if (riverTile !== "water") {
-        tiles.push({
-          key: `river-${cell.key}`,
-          url: `${hexAssetPath}${riverTile}.glb`,
-          position: [cell.position[0], OVERLAY_TILE_Y, cell.position[2]],
-          rotation: [0, tileRotationFromMask(mask), 0],
-          scale: 1,
-        });
-      }
-    } else if (pathCells.has(cell.key)) {
-      const mask = edgeMask(cell, pathEdges, plazaCells);
-      const pathTile = selectTileFromMask(mask, "path");
-      tiles.push({
-        key: `path-${cell.key}`,
-        url: pathTile === "path-square" ? `${hexAssetPath}path-square.glb` : `${hexAssetPath}${pathTile}.glb`,
-        position: [cell.position[0], OVERLAY_TILE_Y, cell.position[2]],
-        rotation: [0, tileRotationFromMask(mask), 0],
-        scale: 1,
-      });
-    }
+    void pathCells;
+    void riverCells;
+    void pathEdges;
+    void riverEdges;
+    void plazaCells;
   }
 
   return tiles;
+}
+
+function buildRouteNetwork(layout: StudioWorldLayout): RouteNetworkShape {
+  const stageAnchor = layout.anchors.find((anchor) => anchor.zone.type === "main_stage") ?? layout.anchors[0];
+  if (!stageAnchor) {
+    return { pathRoutes: [], riverRoute: [] };
+  }
+
+  const stageFront: [number, number, number] = [
+    stageAnchor.position[0],
+    0.12,
+    stageAnchor.position[2] + 1.46,
+  ];
+
+  const pathRoutes = layout.anchors
+    .filter((anchor) => anchor.zone.id !== stageAnchor.zone.id)
+    .map((anchor) => {
+      const target: [number, number, number] = [anchor.position[0], 0.12, anchor.position[2]];
+      const dx = target[0] - stageAnchor.position[0];
+      const dz = target[2] - stageAnchor.position[2];
+      const horizontalBias = Math.abs(dx) > Math.abs(dz) * 0.8;
+      const exit: [number, number, number] = horizontalBias
+        ? [stageAnchor.position[0] + Math.sign(dx || 1) * 0.9, 0.12, stageAnchor.position[2] + 0.55]
+        : [stageAnchor.position[0], 0.12, stageAnchor.position[2] + Math.sign(dz || 1) * 0.95];
+      const control: [number, number, number] = [
+        stageAnchor.position[0] + dx * 0.52,
+        0.12,
+        stageAnchor.position[2] + dz * 0.46 + (horizontalBias ? 0.28 : 0),
+      ];
+      const entry: [number, number, number] = [
+        target[0] - Math.sign(dx || 1) * 0.2,
+        0.12,
+        target[2] - Math.sign(dz || 1) * 0.2,
+      ];
+
+      return [stageFront, exit, control, entry, target];
+    });
+
+  const riverWaypoints = [
+    axialToWorld(-6, 1, MODEL_HEX_SIDE),
+    axialToWorld(-4, 0, MODEL_HEX_SIDE),
+    axialToWorld(-2, -1, MODEL_HEX_SIDE),
+    axialToWorld(1, -2, MODEL_HEX_SIDE),
+    axialToWorld(4, -2, MODEL_HEX_SIDE),
+    axialToWorld(6, -1, MODEL_HEX_SIDE),
+  ].map((position) => [position[0], 0.1, position[2]] as [number, number, number]);
+
+  return {
+    pathRoutes,
+    riverRoute: riverWaypoints,
+  };
+}
+
+function buildRouteSegments(points: Array<[number, number, number]>) {
+  const segments: Array<{ midX: number; midZ: number; length: number; yaw: number }> = [];
+
+  for (let index = 0; index < points.length - 1; index += 1) {
+    const [ax, , az] = points[index];
+    const [bx, , bz] = points[index + 1];
+    const dx = bx - ax;
+    const dz = bz - az;
+    const length = Math.hypot(dx, dz);
+    if (length < 0.001) continue;
+
+    segments.push({
+      midX: (ax + bx) / 2,
+      midZ: (az + bz) / 2,
+      length,
+      yaw: Math.atan2(dz, dx),
+    });
+  }
+
+  return segments;
+}
+
+function sampleSmoothPath(points: Array<[number, number, number]>) {
+  if (points.length <= 2) return points;
+
+  const curve = new THREE.CatmullRomCurve3(points.map((point) => new THREE.Vector3(point[0], point[1], point[2])));
+  const divisions = Math.max(16, points.length * 8);
+  const sampled = curve.getPoints(divisions);
+
+  return sampled.map((point) => [point.x, point.y, point.z] as [number, number, number]);
 }
 
 function axialToWorld(q: number, r: number, size: number): [number, number, number] {
@@ -794,6 +1054,22 @@ function nearestExistingCell(cellMap: Map<string, HexCell>, preferred: HexCellCo
   return bestCell ?? preferred;
 }
 
+function nearestCellInDisk(origin: HexCellCoord, candidates: HexCellCoord[], predicate: (candidate: HexCellCoord) => boolean) {
+  let best: HexCellCoord | null = null;
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (const candidate of candidates) {
+    if (!predicate(candidate)) continue;
+    const distance = hexDistance(origin, candidate);
+    if (distance > 0 && distance < bestDistance) {
+      bestDistance = distance;
+      best = candidate;
+    }
+  }
+
+  return best;
+}
+
 function edgeKey(a: HexCellCoord, b: HexCellCoord) {
   const aKey = hexKey(a.q, a.r);
   const bKey = hexKey(b.q, b.r);
@@ -816,46 +1092,6 @@ function edgeCellsFromSet(edgeSet: Set<string>) {
   return cells;
 }
 
-function edgeMask(cell: HexCellCoord, edgeSet: Set<string>, secondary?: Set<string>) {
-  const mask: number[] = [];
-
-  for (let index = 0; index < HEX_DIRECTIONS.length; index += 1) {
-    const direction = HEX_DIRECTIONS[index];
-    const neighbor = { q: cell.q + direction.q, r: cell.r + direction.r };
-    const key = edgeKey(cell, neighbor);
-    if (edgeSet.has(key) || secondary?.has(hexKey(neighbor.q, neighbor.r))) {
-      mask.push(index);
-    }
-  }
-
-  return mask;
-}
-
-function selectTileFromMask(mask: number[], family: "path" | "river") {
-  if (mask.length >= 3) return `${family}-crossing`;
-  if (mask.length === 2) {
-    const [a, b] = [...mask].sort((left, right) => left - right);
-    const diff = (b - a + 6) % 6;
-    return diff === 3 ? `${family}-straight` : `${family}-corner`;
-  }
-  if (mask.length === 1) return `${family}-end`;
-  return family === "path" ? "path-square" : "water";
-}
-
-function tileRotationFromMask(mask: number[]) {
-  if (mask.length === 0) return 0;
-
-  const sorted = [...mask].sort((a, b) => a - b);
-  if (mask.length === 2) {
-    const diff = (sorted[1] - sorted[0] + 6) % 6;
-    if (diff === 3) {
-      return (Math.PI / 3) * sorted[0];
-    }
-  }
-
-  return (Math.PI / 3) * sorted[0];
-}
-
 [
   `${hexAssetPath}grass.glb`,
   `${hexAssetPath}grass-forest.glb`,
@@ -870,7 +1106,16 @@ function tileRotationFromMask(mask: number[]) {
   `${hexAssetPath}river-straight.glb`,
   `${hexAssetPath}river-corner.glb`,
   `${hexAssetPath}river-end.glb`,
+  `${hexAssetPath}river-start.glb`,
   `${hexAssetPath}river-crossing.glb`,
+  `${hexAssetPath}river-intersectionA.glb`,
+  `${hexAssetPath}river-intersectionB.glb`,
+  `${hexAssetPath}river-intersectionC.glb`,
+  `${hexAssetPath}river-intersectionD.glb`,
+  `${hexAssetPath}river-intersectionE.glb`,
+  `${hexAssetPath}river-intersectionF.glb`,
+  `${hexAssetPath}river-intersectionG.glb`,
+  `${hexAssetPath}river-intersectionH.glb`,
   `${hexAssetPath}building-castle.glb`,
   `${hexAssetPath}building-walls.glb`,
   `${hexAssetPath}unit-wall-tower.glb`,
@@ -883,6 +1128,14 @@ function tileRotationFromMask(mask: number[]) {
   `${hexAssetPath}path-corner.glb`,
   `${hexAssetPath}path-end.glb`,
   `${hexAssetPath}path-crossing.glb`,
+  `${hexAssetPath}path-intersectionA.glb`,
+  `${hexAssetPath}path-intersectionB.glb`,
+  `${hexAssetPath}path-intersectionC.glb`,
+  `${hexAssetPath}path-intersectionD.glb`,
+  `${hexAssetPath}path-intersectionE.glb`,
+  `${hexAssetPath}path-intersectionF.glb`,
+  `${hexAssetPath}path-intersectionG.glb`,
+  `${hexAssetPath}path-intersectionH.glb`,
   `${hexAssetPath}path-square.glb`,
   `${hexAssetPath}bridge.glb`,
   `${arenaAssetPath}wall-gate.glb`,
