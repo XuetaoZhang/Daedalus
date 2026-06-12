@@ -62,6 +62,21 @@ const workflowCards = [
   },
 ];
 
+const useCases = [
+  {
+    title: "Hackathon Arena",
+    detail: "Spin up a demo day world with stage, sponsor booths, project lanes, and proof surfaces.",
+  },
+  {
+    title: "DAO Hall",
+    detail: "Turn governance flows into a navigable member space with proposals, identity, and roadmap zones.",
+  },
+  {
+    title: "NFT Gallery",
+    detail: "Present collections, creator stories, and mint proof in a browser-ready 3D experience.",
+  },
+];
+
 const presetCases: Array<{
   label: string;
   prompt: string;
@@ -185,6 +200,10 @@ export function App() {
 }
 
 function HomePage({ onEnterStudio }: { onEnterStudio: () => void }) {
+  const scrollToWorkflow = () => {
+    document.getElementById("workflow-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   return (
     <div className="page-home">
       <section className="hero-section">
@@ -204,7 +223,9 @@ function HomePage({ onEnterStudio }: { onEnterStudio: () => void }) {
               Get Started
               <ArrowRight size={18} />
             </button>
-            <button className="ghost-button">Watch Demo</button>
+            <button className="ghost-button" onClick={scrollToWorkflow}>
+              Watch Demo
+            </button>
           </div>
           <div className="hero-stats">
             <StatValue value="120+" label="Worlds Generated" />
@@ -218,7 +239,7 @@ function HomePage({ onEnterStudio }: { onEnterStudio: () => void }) {
         </div>
       </section>
 
-      <section className="workflow-section">
+      <section className="workflow-section" id="workflow-section">
         <div className="section-heading">
           <p>GLM-5.1 Long-Horizon Workflow</p>
         </div>
@@ -230,6 +251,36 @@ function HomePage({ onEnterStudio }: { onEnterStudio: () => void }) {
               <p>{card.detail}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="use-case-section">
+        <div className="section-heading">
+          <p>Use Cases</p>
+        </div>
+        <div className="use-case-grid">
+          {useCases.map((item) => (
+            <article className="use-case-card" key={item.title}>
+              <span>{item.title}</span>
+              <p>{item.detail}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section className="footer-cta-section">
+        <div className="footer-cta-copy">
+          <p>Ready to turn a brief into a browser-ready world?</p>
+          <h2>Open the Studio and run the full planning, validation, repair, and export loop.</h2>
+        </div>
+        <div className="footer-cta-actions">
+          <button className="solid-button" onClick={onEnterStudio}>
+            Enter Studio
+            <ArrowRight size={18} />
+          </button>
+          <button className="ghost-button" onClick={scrollToWorkflow}>
+            Review Workflow
+          </button>
         </div>
       </section>
     </div>
@@ -472,6 +523,25 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
               </p>
             </div>
 
+            <div className="workflow-summary-bar">
+              <div className="summary-chip">
+                <span>Provider</span>
+                <strong>{snapshot.providerLabel}</strong>
+              </div>
+              <div className="summary-chip">
+                <span>Model / Tooling</span>
+                <strong>
+                  {snapshot.trace.find((event) => event.step === "generate_spec")?.tool ||
+                    snapshot.trace.find((event) => event.step === "export")?.tool ||
+                    "Queued"}
+                </strong>
+              </div>
+              <div className="summary-chip">
+                <span>Run Outcome</span>
+                <strong>{snapshot.phase === "complete" ? "Export Ready" : phaseLabelMap[snapshot.phase]}</strong>
+              </div>
+            </div>
+
             <ol className="workflow-trace">
               {snapshot.trace.map((event) => (
                 <TraceRow event={event} key={event.step} />
@@ -502,6 +572,19 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
                     ? "Artifacts will appear after export."
                     : `${snapshot.artifacts.length} deliverables prepared for review and download.`}
                 </p>
+              </div>
+
+              <div className="workflow-foot-card">
+                <span>Deliverables</span>
+                {snapshot.artifacts.length === 0 ? (
+                  <p>README, demo script, scene spec, trace, and submission package will be generated after the run.</p>
+                ) : (
+                  <ul className="deliverable-list">
+                    {snapshot.artifacts.map((artifact) => (
+                      <li key={artifact.id}>{artifact.filename}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </div>
           </section>
