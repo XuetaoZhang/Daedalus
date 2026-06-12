@@ -2,8 +2,11 @@ import type { SceneSpec } from "./sceneSpec";
 
 export const demoSceneSpec: SceneSpec = {
   title: "AI x Web3 Demo Day Arena",
+  summary: "A polished default showcase world for the Daedalus studio.",
   theme: "futuristic",
+  style: "game",
   worldType: "web3_demo_day",
+  constraints: ["browser_ready", "wallet_badge", "nft_proof_wall", "timeline_corridor", "sponsor_zone"],
   zones: [
     {
       id: "entrance",
@@ -22,6 +25,7 @@ export const demoSceneSpec: SceneSpec = {
       position: [0, 0, -6],
       color: "#352061",
       accent: "#b785ff",
+      interactions: ["view_schedule"],
     },
     {
       id: "zai-track",
@@ -76,6 +80,7 @@ export const demoSceneSpec: SceneSpec = {
       position: [7, 0, 4],
       color: "#2c2547",
       accent: "#c4a7ff",
+      interactions: ["view_badges"],
     },
   ],
   web3Proofs: [
