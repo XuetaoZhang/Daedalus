@@ -4,6 +4,8 @@ import {
   ArrowRight,
   CheckCircle2,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   CircleAlert,
   Download,
   LoaderCircle,
@@ -292,6 +294,7 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
   const [snapshot, setSnapshot] = useState<StudioWorkflowSnapshot>(createIdleStudioSnapshot());
   const [isRunning, setIsRunning] = useState(false);
   const [activeArtifactId, setActiveArtifactId] = useState<string | null>(null);
+  const [isWorkflowExpanded, setIsWorkflowExpanded] = useState(false);
 
   useEffect(() => {
     if (snapshot.artifacts.length === 0) return;
@@ -299,6 +302,17 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
       setActiveArtifactId(snapshot.artifacts[0].id);
     }
   }, [activeArtifactId, snapshot.artifacts]);
+
+  useEffect(() => {
+    if (snapshot.phase === "planning" || snapshot.phase === "generating" || snapshot.phase === "validating" || snapshot.phase === "repairing") {
+      setIsWorkflowExpanded(true);
+      return;
+    }
+
+    if (snapshot.phase === "idle" || snapshot.phase === "complete") {
+      setIsWorkflowExpanded(false);
+    }
+  }, [snapshot.phase]);
 
   const activeArtifact =
     snapshot.artifacts.find((artifact) => artifact.id === activeArtifactId) ?? snapshot.artifacts[0] ?? null;
@@ -506,7 +520,50 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
         </aside>
 
         <div className="studio-main">
-          <section className="studio-card workflow-panel">
+          <section className="studio-card preview-panel">
+            <div className="studio-card-head">
+              <span>3D Scene Preview</span>
+              <div className="preview-meta">
+                <span className="meta-pill">{request.style}</span>
+                <span className="meta-pill">{request.theme}</span>
+              </div>
+            </div>
+            <div className="preview-stage">
+              <SceneCanvas className="studio-canvas" cameraTarget={[0, 0, 0]} mode="studio" sceneSpec={snapshot.sceneSpec} zoomRange={[34, 84]} />
+
+              <div className="preview-overlay preview-overlay-top">
+                <span className="overlay-kicker">Current World</span>
+                <strong>{snapshot.sceneSpec.title}</strong>
+                <p>{snapshot.sceneSpec.summary || "Structured scene preview generated from the current prompt."}</p>
+              </div>
+
+              <div className="preview-overlay preview-overlay-bottom">
+                <div className="overlay-stat">
+                  <span>{snapshot.sceneSpec.zones.length}</span>
+                  <small>Zones</small>
+                </div>
+                <div className="overlay-stat">
+                  <span>{snapshot.sceneSpec.web3Proofs.length}</span>
+                  <small>Proofs</small>
+                </div>
+                <div className="overlay-stat">
+                  <span>{snapshot.phase === "complete" ? "Ready" : phaseLabelMap[snapshot.phase]}</span>
+                  <small>Status</small>
+                </div>
+              </div>
+
+              <MiniWorkflowOverlay snapshot={snapshot} />
+
+              {activeArtifact ? (
+                <button className="export-button" onClick={() => downloadArtifact(activeArtifact)}>
+                  <Download size={14} />
+                  Export {activeArtifact.label}
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          <section className={`studio-card workflow-panel ${isWorkflowExpanded ? "is-expanded" : "is-collapsed"}`}>
             <div className="studio-card-head">
               <span>Agent Workflow / Validation</span>
               <div className="preview-meta">
@@ -542,92 +599,74 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
               </div>
             </div>
 
-            <ol className="workflow-trace">
-              {snapshot.trace.map((event) => (
-                <TraceRow event={event} key={event.step} />
-              ))}
-            </ol>
-
-            <div className="workflow-foot-grid">
-              <div className="workflow-foot-card">
-                <span>Validation</span>
-                {snapshot.issues.length === 0 ? (
-                  <p>No blocking issues. The current world plan is demo-ready.</p>
-                ) : (
-                  <ul className="issue-list">
-                    {snapshot.issues.map((issue) => (
-                      <li key={issue.code}>
-                        <strong>{issue.message}</strong>
-                        <span>{issue.repairAction}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-
-              <div className="workflow-foot-card">
-                <span>Artifacts</span>
+            <div className="workflow-collapsed-bar">
+              <div className="workflow-collapsed-copy">
+                <strong>
+                  {snapshot.trace.find((event) => event.status === "running")?.label ||
+                    (snapshot.phase === "complete" ? "Workflow complete" : "Ready to generate")}
+                </strong>
                 <p>
-                  {snapshot.artifacts.length === 0
-                    ? "Artifacts will appear after export."
-                    : `${snapshot.artifacts.length} deliverables prepared for review and download.`}
+                  {snapshot.trace.find((event) => event.status === "running")?.detail ||
+                    (snapshot.phase === "complete"
+                      ? `${snapshot.artifacts.length} deliverables prepared for export.`
+                      : "Generate a world to watch planning, validation, and repair progress live.")}
                 </p>
               </div>
-
-              <div className="workflow-foot-card">
-                <span>Deliverables</span>
-                {snapshot.artifacts.length === 0 ? (
-                  <p>README, demo script, scene spec, trace, and submission package will be generated after the run.</p>
-                ) : (
-                  <ul className="deliverable-list">
-                    {snapshot.artifacts.map((artifact) => (
-                      <li key={artifact.id}>{artifact.filename}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <button className="workflow-toggle" onClick={() => setIsWorkflowExpanded((current) => !current)}>
+                {isWorkflowExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                {isWorkflowExpanded ? "Collapse" : "Expand"}
+              </button>
             </div>
-          </section>
 
-          <section className="studio-card preview-panel">
-            <div className="studio-card-head">
-              <span>3D Scene Preview</span>
-              <div className="preview-meta">
-                <span className="meta-pill">{request.style}</span>
-                <span className="meta-pill">{request.theme}</span>
-              </div>
-            </div>
-            <div className="preview-stage">
-              <SceneCanvas className="studio-canvas" cameraTarget={[0, 0, 0]} mode="studio" sceneSpec={snapshot.sceneSpec} zoomRange={[34, 84]} />
+            {isWorkflowExpanded ? (
+              <>
+                <ol className="workflow-trace">
+                  {snapshot.trace.map((event) => (
+                    <TraceRow event={event} key={event.step} />
+                  ))}
+                </ol>
 
-              <div className="preview-overlay preview-overlay-top">
-                <span className="overlay-kicker">Current World</span>
-                <strong>{snapshot.sceneSpec.title}</strong>
-                <p>{snapshot.sceneSpec.summary || "Structured scene preview generated from the current prompt."}</p>
-              </div>
+                <div className="workflow-foot-grid">
+                  <div className="workflow-foot-card">
+                    <span>Validation</span>
+                    {snapshot.issues.length === 0 ? (
+                      <p>No blocking issues. The current world plan is demo-ready.</p>
+                    ) : (
+                      <ul className="issue-list">
+                        {snapshot.issues.map((issue) => (
+                          <li key={issue.code}>
+                            <strong>{issue.message}</strong>
+                            <span>{issue.repairAction}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
 
-              <div className="preview-overlay preview-overlay-bottom">
-                <div className="overlay-stat">
-                  <span>{snapshot.sceneSpec.zones.length}</span>
-                  <small>Zones</small>
+                  <div className="workflow-foot-card">
+                    <span>Artifacts</span>
+                    <p>
+                      {snapshot.artifacts.length === 0
+                        ? "Artifacts will appear after export."
+                        : `${snapshot.artifacts.length} deliverables prepared for review and download.`}
+                    </p>
+                  </div>
+
+                  <div className="workflow-foot-card">
+                    <span>Deliverables</span>
+                    {snapshot.artifacts.length === 0 ? (
+                      <p>README, demo script, scene spec, trace, and submission package will be generated after the run.</p>
+                    ) : (
+                      <ul className="deliverable-list">
+                        {snapshot.artifacts.map((artifact) => (
+                          <li key={artifact.id}>{artifact.filename}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
-                <div className="overlay-stat">
-                  <span>{snapshot.sceneSpec.web3Proofs.length}</span>
-                  <small>Proofs</small>
-                </div>
-                <div className="overlay-stat">
-                  <span>{snapshot.phase === "complete" ? "Ready" : phaseLabelMap[snapshot.phase]}</span>
-                  <small>Status</small>
-                </div>
-              </div>
-
-              {activeArtifact ? (
-                <button className="export-button" onClick={() => downloadArtifact(activeArtifact)}>
-                  <Download size={14} />
-                  Export {activeArtifact.label}
-                </button>
-              ) : null}
-            </div>
+              </>
+            ) : null}
           </section>
         </div>
       </section>
@@ -732,6 +771,43 @@ function SceneCanvas({
           </>
         )}
       </Canvas>
+    </div>
+  );
+}
+
+function MiniWorkflowOverlay({ snapshot }: { snapshot: StudioWorkflowSnapshot }) {
+  const liveStep = snapshot.trace.find((event) => event.status === "running");
+  const isVisible = snapshot.phase !== "idle";
+
+  if (!isVisible) return null;
+
+  return (
+    <div className={`mini-workflow-overlay ${snapshot.phase === "complete" ? "is-complete" : "is-live"}`}>
+      <div className="mini-workflow-head">
+        <div>
+          <span>GLM Workflow Live</span>
+          <strong>{snapshot.providerLabel}</strong>
+        </div>
+        <small>{snapshot.phase === "complete" ? "Export Ready" : phaseLabelMap[snapshot.phase]}</small>
+      </div>
+
+      <ol className="mini-workflow-steps">
+        {snapshot.trace.map((event) => (
+          <li key={event.step} className={`mini-step mini-step-${event.status}`}>
+            <span className="mini-step-dot" />
+            <span className="mini-step-label">{event.label}</span>
+          </li>
+        ))}
+      </ol>
+
+      <div className="mini-workflow-footer">
+        <p>
+          {liveStep?.detail ||
+            (snapshot.phase === "complete"
+              ? `${snapshot.artifacts.length} deliverables prepared for export.`
+              : "Standing by for the next world brief.")}
+        </p>
+      </div>
     </div>
   );
 }
