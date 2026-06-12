@@ -25,6 +25,7 @@ import { demoSceneSpec } from "./world/demoSceneSpec";
 import { GameStyleWorld } from "./world/GameStyleWorld";
 import type { SceneConstraint, SceneSpec, SceneTheme, WorldStyle } from "./world/sceneSpec";
 import { WorldRenderer } from "./world/WorldRenderer";
+import { buildStudioWorldLayout } from "./world/studioWorldLayout";
 
 type PageTab = "home" | "studio";
 
@@ -735,28 +736,14 @@ function computeStudioCameraView(sceneSpec: SceneSpec) {
     };
   }
 
-  let minX = Number.POSITIVE_INFINITY;
-  let maxX = Number.NEGATIVE_INFINITY;
-  let minZ = Number.POSITIVE_INFINITY;
-  let maxZ = Number.NEGATIVE_INFINITY;
-
-  for (const zone of sceneSpec.zones) {
-    const radius = zone.type === "main_stage" ? 2.4 : 1.8;
-    minX = Math.min(minX, zone.position[0] - radius);
-    maxX = Math.max(maxX, zone.position[0] + radius);
-    minZ = Math.min(minZ, zone.position[2] - radius);
-    maxZ = Math.max(maxZ, zone.position[2] + radius);
-  }
-
-  const width = Math.max(8, maxX - minX);
-  const depth = Math.max(8, maxZ - minZ);
-  const centerX = (minX + maxX) / 2;
-  const centerZ = (minZ + maxZ) / 2;
-  const span = Math.max(width, depth);
-  const zoom = THREE.MathUtils.clamp(64 - span * 2.2, 34, 54);
+  const layout = buildStudioWorldLayout(sceneSpec.zones);
+  const width = Math.max(8, layout.bounds.maxX - layout.bounds.minX);
+  const depth = Math.max(8, layout.bounds.maxZ - layout.bounds.minZ);
+  const span = Math.max(width, depth, layout.supportRadius * 1.9);
+  const zoom = THREE.MathUtils.clamp(70 - span * 2.3, 30, 54);
 
   return {
-    target: [centerX, 0, centerZ] as [number, number, number],
+    target: [layout.bounds.centerX, 0, layout.bounds.centerZ] as [number, number, number],
     zoom,
     height: 10.8,
     distance: 8.6,
