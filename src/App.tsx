@@ -10,7 +10,7 @@ import {
   Sparkles,
   WandSparkles,
 } from "lucide-react";
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { createIdleStudioSnapshot, runStudioWorkflow } from "./agent/studioWorkflow";
 import type {
@@ -568,12 +568,24 @@ function SceneCanvas({
   backgroundColor?: string;
   fogColor?: string;
 }) {
+  const studioView = useMemo(() => {
+    if (mode !== "studio") return null;
+    return computeStudioCameraView(sceneSpec);
+  }, [mode, sceneSpec]);
+
   const cameraSettings = useMemo(
     () =>
       mode === "hero"
         ? { position: [0.9, 10.1, 6.95] as [number, number, number], zoom: 61 }
-        : { position: [0, 10.8, 8.6] as [number, number, number], zoom: 46 },
-    [mode],
+        : {
+            position: [studioView?.target[0] ?? 0, studioView?.height ?? 10.8, studioView?.distance ?? 8.6] as [
+              number,
+              number,
+              number,
+            ],
+            zoom: studioView?.zoom ?? 46,
+          },
+    [mode, studioView],
   );
 
   const studioPalette = useMemo(() => {
@@ -617,6 +629,11 @@ function SceneCanvas({
             <Suspense fallback={null}>
               <WorldRenderer spec={sceneSpec} />
             </Suspense>
+            <StudioCameraRig
+              target={studioView?.target ?? cameraTarget}
+              zoom={studioView?.zoom ?? cameraSettings.zoom}
+              sceneKey={sceneSpec.zones.map((zone) => `${zone.id}:${zone.position.join(",")}`).join("|")}
+            />
             <OrbitControls
               enableDamping
               enablePan={false}
@@ -626,7 +643,7 @@ function SceneCanvas({
               maxZoom={zoomRange[1]}
               maxPolarAngle={Math.PI / 2.25}
               minPolarAngle={Math.PI / 5.5}
-              target={cameraTarget}
+              target={studioView?.target ?? cameraTarget}
             />
           </>
         )}
@@ -682,6 +699,68 @@ function HeroCameraRig({ baseTarget }: { baseTarget: [number, number, number] })
   });
 
   return null;
+}
+
+function StudioCameraRig({
+  target,
+  zoom,
+  sceneKey,
+}: {
+  target: [number, number, number];
+  zoom: number;
+  sceneKey: string;
+}) {
+  const { camera } = useThree();
+  const liveTarget = useMemo(() => new THREE.Vector3(), []);
+
+  useLayoutEffect(() => {
+    if (!(camera instanceof THREE.OrthographicCamera)) return;
+
+    liveTarget.set(...target);
+    camera.zoom = zoom;
+    camera.lookAt(liveTarget);
+    camera.updateProjectionMatrix();
+  }, [camera, liveTarget, sceneKey, target, zoom]);
+
+  return null;
+}
+
+function computeStudioCameraView(sceneSpec: SceneSpec) {
+  if (sceneSpec.zones.length === 0) {
+    return {
+      target: [0, 0, 0] as [number, number, number],
+      zoom: 46,
+      height: 10.8,
+      distance: 8.6,
+    };
+  }
+
+  let minX = Number.POSITIVE_INFINITY;
+  let maxX = Number.NEGATIVE_INFINITY;
+  let minZ = Number.POSITIVE_INFINITY;
+  let maxZ = Number.NEGATIVE_INFINITY;
+
+  for (const zone of sceneSpec.zones) {
+    const radius = zone.type === "main_stage" ? 2.4 : 1.8;
+    minX = Math.min(minX, zone.position[0] - radius);
+    maxX = Math.max(maxX, zone.position[0] + radius);
+    minZ = Math.min(minZ, zone.position[2] - radius);
+    maxZ = Math.max(maxZ, zone.position[2] + radius);
+  }
+
+  const width = Math.max(8, maxX - minX);
+  const depth = Math.max(8, maxZ - minZ);
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minZ + maxZ) / 2;
+  const span = Math.max(width, depth);
+  const zoom = THREE.MathUtils.clamp(64 - span * 2.2, 34, 54);
+
+  return {
+    target: [centerX, 0, centerZ] as [number, number, number],
+    zoom,
+    height: 10.8,
+    distance: 8.6,
+  };
 }
 
 function TraceRow({ event }: { event: AgentTraceEvent }) {

@@ -1,7 +1,7 @@
 import { Text, useGLTF } from "@react-three/drei";
 import { useMemo } from "react";
 import * as THREE from "three";
-import type { SceneSpec, ZoneSpec } from "./sceneSpec";
+import type { SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
 
 type WorldRendererProps = {
   spec: SceneSpec;
@@ -21,28 +21,19 @@ const arenaAssetPath = "/kenney_mini-arena/Models/GLB%20format/";
 
 const paletteByStyle = {
   game: {
-    base: "#121722",
-    plate: "#192130",
-    ring: "#7ea2ff",
+    rim: "#3e4758",
     glow: "#5fd5ff",
     backdrop: "#d4c08d",
-    label: "#f7fbff",
   },
   animation: {
-    base: "#163445",
-    plate: "#21475c",
-    ring: "#ffab8a",
+    rim: "#586875",
     glow: "#7de7ff",
     backdrop: "#e6ddd0",
-    label: "#fff6ee",
   },
   voxel: {
-    base: "#28313d",
-    plate: "#323d4b",
-    ring: "#82d46b",
+    rim: "#546068",
     glow: "#8da6ff",
     backdrop: "#bac195",
-    label: "#f5f8ff",
   },
 } as const;
 
@@ -62,52 +53,47 @@ export function WorldRenderer({ spec }: WorldRendererProps) {
 
   return (
     <group>
-      <ArenaFloor base={palette.base} plate={palette.plate} ring={palette.ring} glow={palette.glow} />
+      <HexTerrain spec={spec} style={spec.style} rim={palette.rim} glow={palette.glow} />
       {spec.zones.map((zone) => (
         <ZonePrefab key={zone.id} zone={zone} style={spec.style} />
       ))}
-      <Text
-        position={[0, 3.4, -1]}
-        fontSize={0.52}
-        color={palette.label}
-        anchorX="center"
-        anchorY="middle"
-        maxWidth={8}
-      >
-        {spec.title}
-      </Text>
     </group>
   );
 }
 
-function ArenaFloor({
-  base,
-  plate,
-  ring,
-  glow,
-}: {
-  base: string;
-  plate: string;
-  ring: string;
-  glow: string;
-}) {
+type TerrainTile = {
+  key: string;
+  url: string;
+  position: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: number | [number, number, number];
+  tint?: string;
+  tintStrength?: number;
+};
+
+function HexTerrain({ spec, style, rim, glow }: { spec: SceneSpec; style: WorldStyle; rim: string; glow: string }) {
+  const tiles = useMemo(() => buildTerrainTiles(spec, style), [spec, style]);
+
   return (
     <group>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.1, 0]} receiveShadow>
-        <cylinderGeometry args={[10.1, 10.35, 0.42, 96]} />
-        <meshStandardMaterial color={base} roughness={0.72} metalness={0.18} />
+      {tiles.map((tile) => (
+        <PrefabModel
+          key={tile.key}
+          url={tile.url}
+          position={tile.position}
+          rotation={tile.rotation}
+          scale={tile.scale}
+          tint={tile.tint}
+          tintStrength={tile.tintStrength}
+        />
+      ))}
+      <mesh position={[0, -0.24, 0]} receiveShadow>
+        <cylinderGeometry args={[7.5, 7.86, 0.28, 96]} />
+        <meshStandardMaterial color={rim} roughness={0.82} metalness={0.08} />
       </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.02, 0]} receiveShadow>
-        <circleGeometry args={[9.45, 96]} />
-        <meshStandardMaterial color={plate} roughness={0.66} metalness={0.15} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.03, 0]}>
-        <ringGeometry args={[3.65, 3.82, 96]} />
-        <meshBasicMaterial color={glow} transparent opacity={0.82} />
-      </mesh>
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.035, 0]}>
-        <ringGeometry args={[7.25, 7.42, 128]} />
-        <meshBasicMaterial color={ring} transparent opacity={0.54} />
+      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.08, 0]}>
+        <ringGeometry args={[6.65, 6.86, 96]} />
+        <meshBasicMaterial color={glow} transparent opacity={0.2} />
       </mesh>
     </group>
   );
@@ -349,7 +335,313 @@ function mixHexColors(a: string, b: string, amount: number) {
   return `#${colorA.getHexString()}`.toUpperCase();
 }
 
+type HexCell = {
+  q: number;
+  r: number;
+  key: string;
+  position: [number, number, number];
+  noise: number;
+  distance: number;
+};
+
+const HEX_DIRECTIONS: Array<{ q: number; r: number }> = [
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+];
+
+const MODEL_HEX_HEIGHT = 1.154700517654419;
+const MODEL_HEX_SIDE = MODEL_HEX_HEIGHT / 2;
+const BASE_TILE_SCALE = 1.002;
+const OVERLAY_TILE_Y = 0.012;
+
+function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
+  const tileRadius = 4;
+  const tileSize = MODEL_HEX_SIDE;
+  const cellMap = new Map<string, HexCell>();
+
+  for (let q = -tileRadius; q <= tileRadius; q += 1) {
+    for (let r = -tileRadius; r <= tileRadius; r += 1) {
+      const s = -q - r;
+      if (Math.max(Math.abs(q), Math.abs(r), Math.abs(s)) > tileRadius) continue;
+
+      const position = axialToWorld(q, r, tileSize);
+      cellMap.set(hexKey(q, r), {
+        q,
+        r,
+        key: hexKey(q, r),
+        position,
+        noise: terrainNoise(q, r, style),
+        distance: Math.hypot(position[0], position[2]),
+      });
+    }
+  }
+
+  const zoneAnchors = spec.zones.map((zone) => {
+    const axial = worldToAxial(zone.position[0], zone.position[2], tileSize);
+    const cell = roundAxial(axial.q, axial.r);
+    return {
+      zone,
+      cell,
+    };
+  });
+
+  const stageAnchor = zoneAnchors.find((anchor) => anchor.zone.type === "main_stage") ?? zoneAnchors[0];
+  const plazaCells = new Set<string>();
+  const pathCells = new Set<string>();
+  const riverCells = new Set<string>();
+  const forestCells = new Set<string>();
+  const stoneCells = new Set<string>();
+  const sandCells = new Set<string>();
+
+  for (const anchor of zoneAnchors) {
+    const plazaRadius = anchor.zone.type === "main_stage" ? 2 : 1;
+    for (const cell of hexDisk(anchor.cell, plazaRadius)) {
+      plazaCells.add(hexKey(cell.q, cell.r));
+    }
+    for (const cell of hexRing(anchor.cell, plazaRadius + 1)) {
+      pathCells.add(hexKey(cell.q, cell.r));
+    }
+  }
+
+  for (const anchor of zoneAnchors) {
+    if (anchor === stageAnchor) continue;
+    for (const cell of hexLine(stageAnchor.cell, anchor.cell)) {
+      pathCells.add(hexKey(cell.q, cell.r));
+    }
+  }
+
+  for (const cell of hexLine({ q: -tileRadius, r: 1 }, { q: tileRadius - 1, r: -2 })) {
+    const key = hexKey(cell.q, cell.r);
+    if (!plazaCells.has(key)) riverCells.add(key);
+  }
+
+  for (const cell of cellMap.values()) {
+    if (plazaCells.has(cell.key) || pathCells.has(cell.key) || riverCells.has(cell.key)) continue;
+
+    if (cell.distance > 4.6 && cell.noise > 0.68) forestCells.add(cell.key);
+    else if (cell.distance > 4.4 && cell.noise > 0.52) stoneCells.add(cell.key);
+    else if (cell.noise < 0.18) sandCells.add(cell.key);
+  }
+
+  const tiles: TerrainTile[] = [];
+
+  for (const cell of cellMap.values()) {
+    let asset = `${hexAssetPath}grass.glb`;
+    let tint: string | undefined;
+    let tintStrength = 0;
+
+    if (plazaCells.has(cell.key)) {
+      asset = cell.noise > 0.52 ? `${hexAssetPath}sand.glb` : `${hexAssetPath}grass.glb`;
+    } else if (forestCells.has(cell.key)) {
+      asset = `${hexAssetPath}grass-forest.glb`;
+    } else if (stoneCells.has(cell.key)) {
+      asset = cell.noise > 0.72 ? `${hexAssetPath}stone-mountain.glb` : `${hexAssetPath}stone-rocks.glb`;
+    } else if (sandCells.has(cell.key)) {
+      asset = cell.noise < 0.08 ? `${hexAssetPath}sand-rocks.glb` : `${hexAssetPath}sand.glb`;
+    } else if (cell.noise > 0.62) {
+      asset = `${hexAssetPath}grass-hill.glb`;
+    }
+
+    if (style === "animation" && !asset.includes("water") && !asset.includes("path")) {
+      tint = "#B6E4DD";
+      tintStrength = 0.12;
+    }
+
+    if (style === "voxel" && asset.includes("grass")) {
+      tint = "#8DCB78";
+      tintStrength = 0.15;
+    }
+
+    tiles.push({
+      key: `base-${cell.key}`,
+      url: asset,
+      position: cell.position,
+      rotation: [0, 0, 0],
+      scale: BASE_TILE_SCALE,
+      tint,
+      tintStrength,
+    });
+
+    if (riverCells.has(cell.key)) {
+      const mask = neighborMask(cell, riverCells);
+      const riverTile = selectTileFromMask(mask, "river");
+      if (riverTile !== "water") {
+        tiles.push({
+          key: `river-${cell.key}`,
+          url: `${hexAssetPath}${riverTile}.glb`,
+          position: [cell.position[0], OVERLAY_TILE_Y, cell.position[2]],
+          rotation: [0, tileRotationFromMask(mask), 0],
+          scale: 1,
+        });
+      }
+    } else if (pathCells.has(cell.key)) {
+      const mask = neighborMask(cell, pathCells, plazaCells);
+      const pathTile = selectTileFromMask(mask, "path");
+      tiles.push({
+        key: `path-${cell.key}`,
+        url: pathTile === "path-square" ? `${hexAssetPath}path-square.glb` : `${hexAssetPath}${pathTile}.glb`,
+        position: [cell.position[0], OVERLAY_TILE_Y, cell.position[2]],
+        rotation: [0, tileRotationFromMask(mask), 0],
+        scale: 1,
+      });
+    }
+  }
+
+  return tiles;
+}
+
+function axialToWorld(q: number, r: number, size: number): [number, number, number] {
+  const x = size * Math.sqrt(3) * (q + r / 2);
+  const z = size * 1.5 * r;
+  return [x, 0, z];
+}
+
+function worldToAxial(x: number, z: number, size: number) {
+  return {
+    q: (Math.sqrt(3) / 3 * x - 1 / 3 * z) / size,
+    r: (2 / 3 * z) / size,
+  };
+}
+
+function roundAxial(q: number, r: number) {
+  const x = q;
+  const z = r;
+  const y = -x - z;
+
+  let rx = Math.round(x);
+  let ry = Math.round(y);
+  let rz = Math.round(z);
+
+  const xDiff = Math.abs(rx - x);
+  const yDiff = Math.abs(ry - y);
+  const zDiff = Math.abs(rz - z);
+
+  if (xDiff > yDiff && xDiff > zDiff) {
+    rx = -ry - rz;
+  } else if (yDiff > zDiff) {
+    ry = -rx - rz;
+  } else {
+    rz = -rx - ry;
+  }
+
+  return { q: rx, r: rz };
+}
+
+function terrainNoise(q: number, r: number, style: WorldStyle) {
+  const seed = style === "game" ? 17 : style === "animation" ? 29 : 41;
+  const raw = Math.sin(q * 12.9898 + r * 78.233 + seed) * 43758.5453;
+  return raw - Math.floor(raw);
+}
+
+function hexKey(q: number, r: number) {
+  return `${q}:${r}`;
+}
+
+function hexDisk(center: { q: number; r: number }, radius: number) {
+  const cells: Array<{ q: number; r: number }> = [];
+  for (let dq = -radius; dq <= radius; dq += 1) {
+    for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr += 1) {
+      cells.push({ q: center.q + dq, r: center.r + dr });
+    }
+  }
+  return cells;
+}
+
+function hexRing(center: { q: number; r: number }, radius: number) {
+  if (radius <= 0) return [center];
+  const cells: Array<{ q: number; r: number }> = [];
+  let current = {
+    q: center.q + HEX_DIRECTIONS[4].q * radius,
+    r: center.r + HEX_DIRECTIONS[4].r * radius,
+  };
+  for (let side = 0; side < 6; side += 1) {
+    for (let step = 0; step < radius; step += 1) {
+      cells.push({ ...current });
+      current = {
+        q: current.q + HEX_DIRECTIONS[side].q,
+        r: current.r + HEX_DIRECTIONS[side].r,
+      };
+    }
+  }
+  return cells;
+}
+
+function hexLine(a: { q: number; r: number }, b: { q: number; r: number }) {
+  const distance = hexDistance(a, b);
+  const cells: Array<{ q: number; r: number }> = [];
+  for (let step = 0; step <= distance; step += 1) {
+    const t = distance === 0 ? 0 : step / distance;
+    cells.push(roundAxial(THREE.MathUtils.lerp(a.q, b.q, t), THREE.MathUtils.lerp(a.r, b.r, t)));
+  }
+  return dedupeCells(cells);
+}
+
+function hexDistance(a: { q: number; r: number }, b: { q: number; r: number }) {
+  const as = -a.q - a.r;
+  const bs = -b.q - b.r;
+  return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(as - bs));
+}
+
+function dedupeCells(cells: Array<{ q: number; r: number }>) {
+  const seen = new Set<string>();
+  return cells.filter((cell) => {
+    const key = hexKey(cell.q, cell.r);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function neighborMask(cell: { q: number; r: number }, primary: Set<string>, secondary?: Set<string>) {
+  const mask: number[] = [];
+  for (let index = 0; index < HEX_DIRECTIONS.length; index += 1) {
+    const direction = HEX_DIRECTIONS[index];
+    const key = hexKey(cell.q + direction.q, cell.r + direction.r);
+    if (primary.has(key) || secondary?.has(key)) {
+      mask.push(index);
+    }
+  }
+  return mask;
+}
+
+function selectTileFromMask(mask: number[], family: "path" | "river") {
+  if (mask.length >= 3) return `${family}-crossing`;
+  if (mask.length === 2) {
+    const [a, b] = [...mask].sort((left, right) => left - right);
+    const diff = (b - a + 6) % 6;
+    return diff === 3 ? `${family}-straight` : `${family}-corner`;
+  }
+  if (mask.length === 1) return `${family}-end`;
+  return family === "path" ? "path-square" : "water";
+}
+
+function tileRotationFromMask(mask: number[]) {
+  if (mask.length === 0) return 0;
+  const sorted = [...mask].sort((a, b) => a - b);
+  if (mask.length === 2) {
+    const diff = (sorted[1] - sorted[0] + 6) % 6;
+    if (diff === 3) {
+      return (Math.PI / 3) * sorted[0];
+    }
+  }
+  return (Math.PI / 3) * sorted[0];
+}
+
 [
+  `${hexAssetPath}grass.glb`,
+  `${hexAssetPath}grass-forest.glb`,
+  `${hexAssetPath}grass-hill.glb`,
+  `${hexAssetPath}sand.glb`,
+  `${hexAssetPath}sand-rocks.glb`,
+  `${hexAssetPath}stone-hill.glb`,
+  `${hexAssetPath}stone-rocks.glb`,
+  `${hexAssetPath}stone-mountain.glb`,
+  `${hexAssetPath}water.glb`,
+  `${hexAssetPath}water-island.glb`,
   `${hexAssetPath}building-castle.glb`,
   `${hexAssetPath}building-walls.glb`,
   `${hexAssetPath}unit-wall-tower.glb`,
