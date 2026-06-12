@@ -50,12 +50,23 @@ const zoneRadiusByType: Record<ZoneSpec["type"], number> = {
 
 export function WorldRenderer({ spec }: WorldRendererProps) {
   const palette = paletteByStyle[spec.style];
+  const layout = useMemo(() => buildZoneLayout(spec.zones), [spec.zones]);
+  const anchorByZoneId = useMemo(
+    () =>
+      new Map(
+        layout.anchors.map((anchor) => [
+          anchor.zone.id,
+          axialToWorld(anchor.cell.q, anchor.cell.r, MODEL_HEX_SIDE),
+        ]),
+      ),
+    [layout.anchors],
+  );
 
   return (
     <group>
       <HexTerrain spec={spec} style={spec.style} rim={palette.rim} glow={palette.glow} />
       {spec.zones.map((zone) => (
-        <ZonePrefab key={zone.id} zone={zone} style={spec.style} />
+        <ZonePrefab key={zone.id} zone={zone} style={spec.style} overridePosition={anchorByZoneId.get(zone.id)} />
       ))}
     </group>
   );
@@ -138,14 +149,22 @@ function PrefabModel({
   return <primitive object={scene} position={position} rotation={rotation} scale={scale} />;
 }
 
-function ZonePrefab({ zone, style }: { zone: ZoneSpec; style: WorldStyle }) {
+function ZonePrefab({
+  zone,
+  style,
+  overridePosition,
+}: {
+  zone: ZoneSpec;
+  style: WorldStyle;
+  overridePosition?: [number, number, number];
+}) {
   const palette = paletteByStyle[style];
   const radius = zoneRadiusByType[zone.type];
   const tintStrength = style === "game" ? 0.16 : style === "animation" ? 0.3 : 0.5;
   const platformColor = mixHexColors(zone.color, palette.backdrop, style === "voxel" ? 0.46 : 0.32);
 
   return (
-    <group position={zone.position}>
+    <group position={overridePosition ?? zone.position}>
       <ZonePad radius={radius} color={platformColor} accent={zone.accent} />
       <PrefabCluster zone={zone} tintStrength={tintStrength} />
       <Text
@@ -359,7 +378,8 @@ const BASE_TILE_SCALE = 1.002;
 const OVERLAY_TILE_Y = 0.012;
 
 function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
-  const tileRadius = 4;
+  const layout = buildZoneLayout(spec.zones);
+  const tileRadius = layout.radius;
   const tileSize = MODEL_HEX_SIDE;
   const cellMap = new Map<string, HexCell>();
 
@@ -380,16 +400,10 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
     }
   }
 
-  const zoneAnchors = spec.zones.map((zone) => {
-    const axial = worldToAxial(zone.position[0], zone.position[2], tileSize);
-    const cell = roundAxial(axial.q, axial.r);
-    return {
-      zone,
-      cell,
-    };
-  });
+  const zoneAnchors = layout.anchors;
 
   const stageAnchor = zoneAnchors.find((anchor) => anchor.zone.type === "main_stage") ?? zoneAnchors[0];
+  const entranceAnchor = zoneAnchors.find((anchor) => anchor.zone.type === "entrance") ?? zoneAnchors[0];
   const plazaCells = new Set<string>();
   const pathCells = new Set<string>();
   const riverCells = new Set<string>();
@@ -402,21 +416,30 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
     for (const cell of hexDisk(anchor.cell, plazaRadius)) {
       plazaCells.add(hexKey(cell.q, cell.r));
     }
-    for (const cell of hexRing(anchor.cell, plazaRadius + 1)) {
-      pathCells.add(hexKey(cell.q, cell.r));
-    }
   }
+
+  const pathEdges = new Set<string>();
+  const riverEdges = new Set<string>();
 
   for (const anchor of zoneAnchors) {
     if (anchor === stageAnchor) continue;
-    for (const cell of hexLine(stageAnchor.cell, anchor.cell)) {
-      pathCells.add(hexKey(cell.q, cell.r));
+    addPathToEdgeSet(pathEdges, hexLine(stageAnchor.cell, anchor.cell));
+  }
+  addPathToEdgeSet(pathEdges, hexLine(entranceAnchor.cell, stageAnchor.cell));
+
+  for (const cell of edgeCellsFromSet(pathEdges)) {
+    if (!plazaCells.has(cell)) {
+      pathCells.add(cell);
     }
   }
 
-  for (const cell of hexLine({ q: -tileRadius, r: 1 }, { q: tileRadius - 1, r: -2 })) {
-    const key = hexKey(cell.q, cell.r);
-    if (!plazaCells.has(key)) riverCells.add(key);
+  const riverRoute = hexLine({ q: -tileRadius + 1, r: 1 }, { q: tileRadius - 1, r: -2 });
+  addPathToEdgeSet(riverEdges, riverRoute);
+
+  for (const cell of edgeCellsFromSet(riverEdges)) {
+    if (!plazaCells.has(cell)) {
+      riverCells.add(cell);
+    }
   }
 
   for (const cell of cellMap.values()) {
@@ -467,7 +490,7 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
     });
 
     if (riverCells.has(cell.key)) {
-      const mask = neighborMask(cell, riverCells);
+      const mask = edgeMask(cell, riverEdges);
       const riverTile = selectTileFromMask(mask, "river");
       if (riverTile !== "water") {
         tiles.push({
@@ -479,7 +502,7 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
         });
       }
     } else if (pathCells.has(cell.key)) {
-      const mask = neighborMask(cell, pathCells, plazaCells);
+      const mask = edgeMask(cell, pathEdges, plazaCells);
       const pathTile = selectTileFromMask(mask, "path");
       tiles.push({
         key: `path-${cell.key}`,
@@ -494,17 +517,67 @@ function buildTerrainTiles(spec: SceneSpec, style: WorldStyle): TerrainTile[] {
   return tiles;
 }
 
+type ZoneAnchor = {
+  zone: ZoneSpec;
+  cell: { q: number; r: number };
+};
+
+function buildZoneLayout(zones: ZoneSpec[]) {
+  const zoneByType = new Map(zones.map((zone) => [zone.type, zone] as const));
+  const ordered = [
+    zoneByType.get("main_stage"),
+    zoneByType.get("entrance"),
+    zoneByType.get("project_booth"),
+    zoneByType.get("sponsor_zone"),
+    zoneByType.get("track_zone"),
+    zoneByType.get("timeline"),
+    zoneByType.get("nft_wall"),
+    zoneByType.get("wallet_badge"),
+  ].filter((zone): zone is ZoneSpec => Boolean(zone));
+
+  const defaultCells: Record<string, { q: number; r: number }> = {
+    main_stage: { q: 0, r: 0 },
+    entrance: { q: 0, r: 4 },
+    project_booth: { q: -4, r: 1 },
+    sponsor_zone: { q: 4, r: -1 },
+    track_zone: { q: 4, r: 2 },
+    timeline: { q: -4, r: 4 },
+    nft_wall: { q: 2, r: 4 },
+    wallet_badge: { q: -1, r: 5 },
+  };
+
+  const used = new Set<string>();
+  const anchors: ZoneAnchor[] = [];
+
+  for (const zone of ordered) {
+    const preferred = defaultCells[zone.type] ?? { q: 0, r: 0 };
+    const cell = findNearestFreeCell(preferred, used, 6);
+    used.add(hexKey(cell.q, cell.r));
+    anchors.push({ zone, cell });
+  }
+
+  return {
+    anchors,
+    radius: 6,
+  };
+}
+
+function findNearestFreeCell(start: { q: number; r: number }, used: Set<string>, maxRadius: number) {
+  if (!used.has(hexKey(start.q, start.r))) return start;
+  for (let radius = 1; radius <= maxRadius; radius += 1) {
+    for (const candidate of hexRing(start, radius)) {
+      if (!used.has(hexKey(candidate.q, candidate.r))) {
+        return candidate;
+      }
+    }
+  }
+  return start;
+}
+
 function axialToWorld(q: number, r: number, size: number): [number, number, number] {
   const x = size * Math.sqrt(3) * (q + r / 2);
   const z = size * 1.5 * r;
   return [x, 0, z];
-}
-
-function worldToAxial(x: number, z: number, size: number) {
-  return {
-    q: (Math.sqrt(3) / 3 * x - 1 / 3 * z) / size,
-    r: (2 / 3 * z) / size,
-  };
 }
 
 function roundAxial(q: number, r: number) {
@@ -596,12 +669,35 @@ function dedupeCells(cells: Array<{ q: number; r: number }>) {
   });
 }
 
-function neighborMask(cell: { q: number; r: number }, primary: Set<string>, secondary?: Set<string>) {
+function edgeKey(a: { q: number; r: number }, b: { q: number; r: number }) {
+  const aKey = hexKey(a.q, a.r);
+  const bKey = hexKey(b.q, b.r);
+  return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
+}
+
+function addPathToEdgeSet(edgeSet: Set<string>, cells: Array<{ q: number; r: number }>) {
+  for (let index = 0; index < cells.length - 1; index += 1) {
+    edgeSet.add(edgeKey(cells[index], cells[index + 1]));
+  }
+}
+
+function edgeCellsFromSet(edgeSet: Set<string>) {
+  const cells = new Set<string>();
+  for (const edge of edgeSet) {
+    const [a, b] = edge.split("|");
+    cells.add(a);
+    cells.add(b);
+  }
+  return cells;
+}
+
+function edgeMask(cell: { q: number; r: number }, edgeSet: Set<string>, secondary?: Set<string>) {
   const mask: number[] = [];
   for (let index = 0; index < HEX_DIRECTIONS.length; index += 1) {
     const direction = HEX_DIRECTIONS[index];
-    const key = hexKey(cell.q + direction.q, cell.r + direction.r);
-    if (primary.has(key) || secondary?.has(key)) {
+    const neighbor = { q: cell.q + direction.q, r: cell.r + direction.r };
+    const key = edgeKey(cell, neighbor);
+    if (edgeSet.has(key) || secondary?.has(hexKey(neighbor.q, neighbor.r))) {
       mask.push(index);
     }
   }
