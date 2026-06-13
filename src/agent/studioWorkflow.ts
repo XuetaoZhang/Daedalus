@@ -1,11 +1,13 @@
 import type { SceneConstraint, SceneSpec, ZoneSpec } from "../world/sceneSpec";
 import { demoSceneSpec } from "../world/demoSceneSpec";
-import { generatePlannedScene } from "./providers";
+import { decideSceneCompletion, decideSceneRepair, generatePlannedScene } from "./providers";
 import { parseSceneSpec } from "./sceneSchema";
 import type {
   AgentTraceEvent,
   Artifact,
+  CompletionDecision,
   PlannerOutput,
+  RepairDecision,
   StudioGenerationRequest,
   StudioWorkflowSnapshot,
   ValidationIssue,
@@ -174,13 +176,22 @@ function repairSceneSpec(spec: SceneSpec, request: StudioGenerationRequest, issu
   };
 }
 
-function createArtifacts(spec: SceneSpec, trace: AgentTraceEvent[], issues: ValidationIssue[], providerSummary: PlannerOutput): Artifact[] {
+function createArtifacts(
+  spec: SceneSpec,
+  trace: AgentTraceEvent[],
+  issues: ValidationIssue[],
+  providerSummary: PlannerOutput,
+  repairDecision?: RepairDecision,
+  completionDecision?: CompletionDecision,
+): Artifact[] {
   const currentDate = new Date().toISOString().slice(0, 10);
   const validationReport = {
     provider: providerSummary.provider,
     model: providerSummary.model,
     issues,
     repaired: issues.length > 0,
+    repairDecision,
+    completionDecision,
   };
 
   return [
@@ -225,6 +236,16 @@ function createArtifacts(spec: SceneSpec, trace: AgentTraceEvent[], issues: Vali
         "",
         "## Validation",
         issues.length === 0 ? "- No validation issues." : issues.map((issue) => `- ${issue.message}`).join("\n"),
+        "",
+        "## Repair Decision",
+        repairDecision
+          ? `- ${repairDecision.provider} / ${repairDecision.model}: ${repairDecision.repairSummary}`
+          : "- No repair decision recorded.",
+        "",
+        "## Completion Decision",
+        completionDecision
+          ? `- ${completionDecision.provider} / ${completionDecision.model}: ${completionDecision.exportSummary}`
+          : "- No completion decision recorded.",
       ].join("\n"),
     },
     {
@@ -272,6 +293,10 @@ function createArtifacts(spec: SceneSpec, trace: AgentTraceEvent[], issues: Vali
         "",
         `- Planner provider: ${providerSummary.provider}`,
         `- Planner model: ${providerSummary.model}`,
+        repairDecision ? `- Repair decision: ${repairDecision.provider} / ${repairDecision.model}` : "- Repair decision: none",
+        completionDecision
+          ? `- Completion decision: ${completionDecision.provider} / ${completionDecision.model}`
+          : "- Completion decision: none",
         "",
         "## Generated files",
         "",
@@ -306,8 +331,9 @@ function createArtifacts(spec: SceneSpec, trace: AgentTraceEvent[], issues: Vali
         `5. Use the current demo brief for **${spec.title}**.`,
         `6. Mention the live planner provider: **${providerSummary.provider} / ${providerSummary.model}**.`,
         "7. Click Generate World and narrate each workflow step as it advances.",
-        "8. Show validation and repair results if issues are found.",
-        "9. End by exporting the generated deliverables.",
+        "8. Point out that the model reads validation output and decides the repair order.",
+        "9. Show the final completion decision before export.",
+        "10. End by exporting the generated deliverables.",
         "",
         "## Suggested prompt",
         "",
@@ -363,6 +389,7 @@ export async function runStudioWorkflow(
   let spec = demoSceneSpec;
   let issues: ValidationIssue[] = [];
   let artifacts: Artifact[] = [];
+  let repairDecision: RepairDecision | undefined;
 
   onUpdate(snapshot("planning", trace, spec, issues, artifacts, "Preparing", "Reading the world brief."));
   trace = updateTrace(trace, "interpret_brief", {
@@ -426,17 +453,33 @@ export async function runStudioWorkflow(
   if (issues.length > 0) {
     trace = updateTrace(trace, "repair", {
       status: "running",
-      detail: issues.map((issue) => issue.repairAction).join(" "),
+      detail: "Reading validation output and deciding the repair order.",
       tool: "Repair Planner",
     });
     onUpdate(snapshot("repairing", trace, spec, issues, artifacts, providerResult.provider, "Repairing missing requirements."));
     await sleep(320);
 
-    const repaired = repairSceneSpec(spec, request, issues);
+    repairDecision = await decideSceneRepair(request, spec, issues);
+    trace = updateTrace(trace, "repair", {
+      status: "running",
+      detail: repairDecision.repairSummary,
+      tool: repairDecision.model,
+    });
+    onUpdate(snapshot("repairing", trace, spec, issues, artifacts, repairDecision.provider, "Model selected the repair strategy."));
+    await sleep(260);
+
+    const orderedIssues =
+      repairDecision.orderedIssueCodes.length === 0
+        ? issues
+        : repairDecision.orderedIssueCodes
+            .map((code) => issues.find((issue) => issue.code === code))
+            .filter((issue): issue is ValidationIssue => Boolean(issue));
+
+    const repaired = repairSceneSpec(spec, request, orderedIssues.length > 0 ? orderedIssues : issues);
     spec = repaired.spec;
     trace = updateTrace(trace, "repair", {
       status: "repaired",
-      detail: repaired.detail,
+      detail: `${repairDecision.repairSummary} ${repaired.detail}`.trim(),
     });
   } else {
     trace = updateTrace(trace, "repair", {
@@ -447,17 +490,48 @@ export async function runStudioWorkflow(
 
   trace = updateTrace(trace, "export", {
     status: "running",
-    detail: "Packaging the final scene spec, trace, and validation report.",
+    detail: "Reviewing the final world state and deciding whether it is ready for export.",
     tool: "Artifacts Builder",
   });
-  onUpdate(snapshot("repairing", trace, spec, issues, artifacts, providerResult.provider, "Packaging the run artifacts."));
+  onUpdate(snapshot("repairing", trace, spec, issues, artifacts, providerResult.provider, "Reviewing export readiness."));
   await sleep(220);
 
-  artifacts = createArtifacts(spec, trace, issues, providerResult);
+  const completionDecision = await decideSceneCompletion(request, spec, issues);
+  trace = updateTrace(trace, "export", {
+    status: "running",
+    detail: completionDecision.exportSummary,
+    tool: completionDecision.model,
+  });
+  onUpdate(
+    snapshot(
+      "repairing",
+      trace,
+      spec,
+      issues,
+      artifacts,
+      completionDecision.provider,
+      "Completion evaluator approved the export path.",
+    ),
+  );
+  await sleep(220);
+
+  artifacts = createArtifacts(spec, trace, issues, providerResult, repairDecision, completionDecision);
   trace = updateTrace(trace, "export", {
     status: "done",
-    detail: `Prepared ${artifacts.length} exportable deliverables.`,
+    detail: `${completionDecision.exportSummary} Prepared ${artifacts.length} exportable deliverables.`,
   });
 
-  onUpdate(snapshot("complete", trace, spec, issues, artifacts, providerResult.provider, "World ready for review and export."));
+  onUpdate(
+    snapshot(
+      "complete",
+      trace,
+      spec,
+      issues,
+      artifacts,
+      completionDecision.provider,
+      completionDecision.readyToExport
+        ? "World ready for review and export."
+        : "World review completed with follow-up recommendations.",
+    ),
+  );
 }

@@ -53,6 +53,23 @@ export type PlannerOutput = {
   model: string;
 };
 
+export type RepairDecision = {
+  shouldRepair: boolean;
+  orderedIssueCodes: string[];
+  repairSummary: string;
+  nextAction: string;
+  provider: string;
+  model: string;
+};
+
+export type CompletionDecision = {
+  readyToExport: boolean;
+  exportSummary: string;
+  rationale: string;
+  provider: string;
+  model: string;
+};
+
 export type StudioWorkflowSnapshot = {
   phase: WorkflowPhase;
   trace: AgentTraceEvent[];

@@ -1,12 +1,21 @@
-import type { PlannerOutput, StudioGenerationRequest } from "./types";
+import type {
+  CompletionDecision,
+  PlannerOutput,
+  RepairDecision,
+  StudioGenerationRequest,
+  ValidationIssue,
+} from "./types";
 import { parseSceneSpec } from "./sceneSchema";
 import { runtimeConfig } from "./runtimeConfig";
 import { buildMockSceneSpec } from "./mockPlanner";
+import type { SceneSpec } from "../world/sceneSpec";
 
 type PlannerProvider = {
   id: "deepseek" | "mock";
   label: string;
   generate(request: StudioGenerationRequest): Promise<PlannerOutput>;
+  decideRepair(request: StudioGenerationRequest, spec: SceneSpec, issues: ValidationIssue[]): Promise<RepairDecision>;
+  decideCompletion(request: StudioGenerationRequest, spec: SceneSpec, issues: ValidationIssue[]): Promise<CompletionDecision>;
 };
 
 const sceneTypeToWorldType = {
@@ -73,6 +82,54 @@ function buildPlannerPrompt(request: StudioGenerationRequest) {
   ].join("\n");
 }
 
+function buildRepairPrompt(request: StudioGenerationRequest, spec: SceneSpec, issues: ValidationIssue[]) {
+  return [
+    "You are the Daedalus repair planner.",
+    "Return a single JSON object only.",
+    "Return JSON with this exact shape:",
+    "{",
+    '  "shouldRepair": true,',
+    '  "orderedIssueCodes": ["missing_nft_proof"],',
+    '  "repairSummary": "string",',
+    '  "nextAction": "string"',
+    "}",
+    "Only reference issue codes that appear in the provided issue list.",
+    "If there are no issues, set shouldRepair to false.",
+    `User prompt: ${request.prompt}`,
+    `Scene type: ${request.sceneType}`,
+    `Style: ${request.style}`,
+    `Theme: ${request.theme}`,
+    `Constraints: ${request.constraints.join(", ") || "none"}`,
+    `Current world title: ${spec.title}`,
+    `Current zones: ${spec.zones.map((zone) => `${zone.type}:${zone.title}`).join(", ")}`,
+    `Current proofs: ${spec.web3Proofs.map((proof) => `${proof.type}:${proof.title}`).join(", ")}`,
+    `Issues: ${JSON.stringify(issues)}`,
+  ].join("\n");
+}
+
+function buildCompletionPrompt(request: StudioGenerationRequest, spec: SceneSpec, issues: ValidationIssue[]) {
+  return [
+    "You are the Daedalus completion evaluator.",
+    "Return a single JSON object only.",
+    "Return JSON with this exact shape:",
+    "{",
+    '  "readyToExport": true,',
+    '  "exportSummary": "string",',
+    '  "rationale": "string"',
+    "}",
+    "Decide whether the world is ready for export based on the brief, constraints, current scene, and remaining issues.",
+    `User prompt: ${request.prompt}`,
+    `Scene type: ${request.sceneType}`,
+    `Style: ${request.style}`,
+    `Theme: ${request.theme}`,
+    `Constraints: ${request.constraints.join(", ") || "none"}`,
+    `Current world title: ${spec.title}`,
+    `Current zones: ${spec.zones.map((zone) => `${zone.type}:${zone.title}`).join(", ")}`,
+    `Current proofs: ${spec.web3Proofs.map((proof) => `${proof.type}:${proof.title}`).join(", ")}`,
+    `Remaining issues: ${JSON.stringify(issues)}`,
+  ].join("\n");
+}
+
 const deepSeekProvider: PlannerProvider = {
   id: "deepseek",
   label: "DeepSeek",
@@ -119,6 +176,118 @@ const deepSeekProvider: PlannerProvider = {
       model: payload?.model || runtimeConfig.deepseekModel,
     };
   },
+  async decideRepair(request, spec, issues) {
+    if (issues.length === 0) {
+      return {
+        shouldRepair: false,
+        orderedIssueCodes: [],
+        repairSummary: "No repair step is required.",
+        nextAction: "proceed_to_export",
+        provider: "DeepSeek",
+        model: runtimeConfig.deepseekModel,
+      };
+    }
+
+    const response = await fetch(`${runtimeConfig.deepseekBaseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${runtimeConfig.deepseekApiKey}`,
+      },
+      body: JSON.stringify({
+        model: runtimeConfig.deepseekModel,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a precise structured-output repair planner for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
+          },
+          {
+            role: "user",
+            content: buildRepairPrompt(request, spec, issues),
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`DeepSeek repair decision failed with ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const text = payload?.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text.trim()) {
+      throw new Error("DeepSeek repair decision did not include message content.");
+    }
+
+    const parsed = JSON.parse(extractJsonObject(text));
+    return {
+      shouldRepair: Boolean(parsed?.shouldRepair),
+      orderedIssueCodes: Array.isArray(parsed?.orderedIssueCodes)
+        ? parsed.orderedIssueCodes.filter((code: unknown): code is string => typeof code === "string")
+        : [],
+      repairSummary:
+        typeof parsed?.repairSummary === "string" && parsed.repairSummary.trim()
+          ? parsed.repairSummary
+          : "Model reviewed validation issues and proposed a repair order.",
+      nextAction:
+        typeof parsed?.nextAction === "string" && parsed.nextAction.trim()
+          ? parsed.nextAction
+          : "apply_repairs",
+      provider: "DeepSeek",
+      model: payload?.model || runtimeConfig.deepseekModel,
+    };
+  },
+  async decideCompletion(request, spec, issues) {
+    const response = await fetch(`${runtimeConfig.deepseekBaseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${runtimeConfig.deepseekApiKey}`,
+      },
+      body: JSON.stringify({
+        model: runtimeConfig.deepseekModel,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a precise structured-output completion evaluator for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
+          },
+          {
+            role: "user",
+            content: buildCompletionPrompt(request, spec, issues),
+          },
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`DeepSeek completion decision failed with ${response.status}`);
+    }
+
+    const payload = await response.json();
+    const text = payload?.choices?.[0]?.message?.content;
+    if (typeof text !== "string" || !text.trim()) {
+      throw new Error("DeepSeek completion decision did not include message content.");
+    }
+
+    const parsed = JSON.parse(extractJsonObject(text));
+    return {
+      readyToExport: typeof parsed?.readyToExport === "boolean" ? parsed.readyToExport : issues.length === 0,
+      exportSummary:
+        typeof parsed?.exportSummary === "string" && parsed.exportSummary.trim()
+          ? parsed.exportSummary
+          : "The world is ready for export.",
+      rationale:
+        typeof parsed?.rationale === "string" && parsed.rationale.trim()
+          ? parsed.rationale
+          : "Model reviewed final world state before export.",
+      provider: "DeepSeek",
+      model: payload?.model || runtimeConfig.deepseekModel,
+    };
+  },
 };
 
 const mockProvider: PlannerProvider = {
@@ -126,6 +295,31 @@ const mockProvider: PlannerProvider = {
   label: "Mock Planner",
   async generate(request) {
     return buildMockSceneSpec(request);
+  },
+  async decideRepair(_request, _spec, issues) {
+    return {
+      shouldRepair: issues.length > 0,
+      orderedIssueCodes: issues.map((issue) => issue.code),
+      repairSummary:
+        issues.length === 0
+          ? "No repair step is required."
+          : `Repair planner prioritized ${issues.length} issue${issues.length > 1 ? "s" : ""} for patching.`,
+      nextAction: issues.length === 0 ? "proceed_to_export" : "apply_repairs",
+      provider: "Mock Planner",
+      model: "deterministic-local",
+    };
+  },
+  async decideCompletion(_request, spec, issues) {
+    return {
+      readyToExport: issues.every((issue) => issue.severity !== "error"),
+      exportSummary: `Final review completed for ${spec.title}.`,
+      rationale:
+        issues.length === 0
+          ? "All required modules are present and the world is ready to export."
+          : `World retains ${issues.length} non-blocking issue${issues.length > 1 ? "s" : ""} but is still demo-ready.`,
+      provider: "Mock Planner",
+      model: "deterministic-local",
+    };
   },
 };
 
@@ -140,4 +334,38 @@ export async function generatePlannedScene(request: StudioGenerationRequest): Pr
   }
 
   return mockProvider.generate(request);
+}
+
+export async function decideSceneRepair(
+  request: StudioGenerationRequest,
+  spec: SceneSpec,
+  issues: ValidationIssue[],
+): Promise<RepairDecision> {
+  if (runtimeConfig.deepseekApiKey) {
+    try {
+      return await deepSeekProvider.decideRepair(request, spec, issues);
+    } catch (error) {
+      console.warn("DeepSeek repair planner failed; falling back to mock repair planner.", error);
+      return mockProvider.decideRepair(request, spec, issues);
+    }
+  }
+
+  return mockProvider.decideRepair(request, spec, issues);
+}
+
+export async function decideSceneCompletion(
+  request: StudioGenerationRequest,
+  spec: SceneSpec,
+  issues: ValidationIssue[],
+): Promise<CompletionDecision> {
+  if (runtimeConfig.deepseekApiKey) {
+    try {
+      return await deepSeekProvider.decideCompletion(request, spec, issues);
+    } catch (error) {
+      console.warn("DeepSeek completion evaluator failed; falling back to mock completion evaluator.", error);
+      return mockProvider.decideCompletion(request, spec, issues);
+    }
+  }
+
+  return mockProvider.decideCompletion(request, spec, issues);
 }
