@@ -1,5 +1,5 @@
-import type { PlannerOutput, StudioGenerationRequest, WorldTypeMap } from "./types";
-import type { SceneSpec, Web3ProofSpec, ZoneSpec } from "../world/sceneSpec";
+import type { LandmarkIntent, PlannerOutput, StudioGenerationRequest, WorldTypeMap } from "./types";
+import type { LandmarkSpec, SceneSpec, Web3ProofSpec, ZoneSpec } from "../world/sceneSpec";
 
 const worldTypeMap: WorldTypeMap = {
   hackathon_arena: "web3_demo_day",
@@ -35,6 +35,28 @@ function titleCase(input: string) {
 
 function makeZone(id: string, type: ZoneSpec["type"], title: string, subtitle: string, position: [number, number, number], color: string, accent: string): ZoneSpec {
   return { id, type, title, subtitle, position, color, accent };
+}
+
+function inferLandmarks(prompt: string): LandmarkIntent[] {
+  const intents: LandmarkIntent[] = [];
+
+  if (prompt.includes("castle") || prompt.includes("城堡")) {
+    intents.push({ type: "castle_outpost", region: "east", title: "Castle Outpost" });
+  }
+
+  if (prompt.includes("windmill") || prompt.includes("风车") || prompt.includes("mill")) {
+    intents.push({ type: "windmill", region: "north", title: "Windmill" });
+  }
+
+  if (prompt.includes("watermill") || prompt.includes("水车")) {
+    intents.push({ type: "watermill", region: "west", title: "Watermill" });
+  }
+
+  if (prompt.includes("wizard") || prompt.includes("magic tower") || prompt.includes("魔法塔")) {
+    intents.push({ type: "wizard_tower", region: "south", title: "Wizard Tower" });
+  }
+
+  return intents.slice(0, 4);
 }
 
 export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOutput {
@@ -78,6 +100,12 @@ export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOut
   }
 
   const web3Proofs: Web3ProofSpec[] = [];
+  const landmarks: LandmarkSpec[] = inferLandmarks(prompt).map((intent, index) => ({
+    id: `${intent.type}-${index + 1}`,
+    type: intent.type,
+    title: intent.title,
+    region: intent.region,
+  }));
 
   if (!shouldOmitProofWall) {
     web3Proofs.push({
@@ -112,6 +140,7 @@ export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOut
     constraints: request.constraints,
     zones,
     web3Proofs,
+    landmarks,
   };
 
   return {

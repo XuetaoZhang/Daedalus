@@ -1,4 +1,4 @@
-import type { SceneConstraint, SceneSpec, SceneTheme, WorldStyle, WorldType } from "../world/sceneSpec";
+import type { LandmarkRegion, LandmarkType, SceneConstraint, SceneSpec, SceneTheme, WorldStyle, WorldType } from "../world/sceneSpec";
 
 export type StudioSceneType = "hackathon_arena" | "dao_hall" | "nft_gallery";
 
@@ -81,3 +81,9 @@ export type StudioWorkflowSnapshot = {
 };
 
 export type WorldTypeMap = Record<StudioSceneType, WorldType>;
+
+export type LandmarkIntent = {
+  type: LandmarkType;
+  region: LandmarkRegion;
+  title: string;
+};

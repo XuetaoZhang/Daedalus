@@ -1,4 +1,4 @@
-import type { ZoneSpec } from "./sceneSpec";
+import type { LandmarkRegion, LandmarkSpec, ZoneSpec } from "./sceneSpec";
 
 type HexCellCoord = {
   q: number;
@@ -11,8 +11,15 @@ type ZoneAnchor = {
   position: [number, number, number];
 };
 
+export type LandmarkAnchor = {
+  landmark: LandmarkSpec;
+  cell: HexCellCoord;
+  position: [number, number, number];
+};
+
 export type StudioWorldLayout = {
   anchors: ZoneAnchor[];
+  landmarkAnchors: LandmarkAnchor[];
   tileRadius: number;
   supportRadius: number;
   bounds: {
@@ -48,7 +55,7 @@ const HEX_DIRECTIONS: HexCellCoord[] = [
 const MODEL_HEX_HEIGHT = 1.154700517654419;
 const MODEL_HEX_SIDE = MODEL_HEX_HEIGHT / 2;
 
-export function buildStudioWorldLayout(zones: ZoneSpec[]): StudioWorldLayout {
+export function buildStudioWorldLayout(zones: ZoneSpec[], landmarks: LandmarkSpec[] = []): StudioWorldLayout {
   const zoneByType = new Map(zones.map((zone) => [zone.type, zone] as const));
   const ordered = [
     zoneByType.get("main_stage"),
@@ -86,13 +93,33 @@ export function buildStudioWorldLayout(zones: ZoneSpec[]): StudioWorldLayout {
     });
   }
 
-  const bounds = anchors.reduce(
+  const landmarkAnchors: LandmarkAnchor[] = [];
+  const regionCells: Record<LandmarkRegion, HexCellCoord> = {
+    north: { q: 0, r: 7 },
+    south: { q: 0, r: -5 },
+    east: { q: 6, r: 1 },
+    west: { q: -6, r: 2 },
+    center_ring: { q: 3, r: -2 },
+    outer_ring: { q: -1, r: 7 },
+  };
+
+  for (const landmark of landmarks) {
+    const preferred = regionCells[landmark.region] ?? { q: 0, r: 0 };
+    const cell = findNearestFreeCell(preferred, used, 8);
+    used.add(hexKey(cell.q, cell.r));
+    landmarkAnchors.push({
+      landmark,
+      cell,
+      position: axialToWorld(cell.q, cell.r, MODEL_HEX_SIDE),
+    });
+  }
+
+  const bounds = [...anchors.map((anchor) => ({ position: anchor.position, radius: zoneRadiusByType[anchor.zone.type] + 1.1 })), ...landmarkAnchors.map((anchor) => ({ position: anchor.position, radius: 1.5 }))].reduce(
     (accumulator, anchor) => {
-      const radius = zoneRadiusByType[anchor.zone.type] + 1.1;
-      accumulator.minX = Math.min(accumulator.minX, anchor.position[0] - radius);
-      accumulator.maxX = Math.max(accumulator.maxX, anchor.position[0] + radius);
-      accumulator.minZ = Math.min(accumulator.minZ, anchor.position[2] - radius);
-      accumulator.maxZ = Math.max(accumulator.maxZ, anchor.position[2] + radius);
+      accumulator.minX = Math.min(accumulator.minX, anchor.position[0] - anchor.radius);
+      accumulator.maxX = Math.max(accumulator.maxX, anchor.position[0] + anchor.radius);
+      accumulator.minZ = Math.min(accumulator.minZ, anchor.position[2] - anchor.radius);
+      accumulator.maxZ = Math.max(accumulator.maxZ, anchor.position[2] + anchor.radius);
       return accumulator;
     },
     {
@@ -111,11 +138,11 @@ export function buildStudioWorldLayout(zones: ZoneSpec[]): StudioWorldLayout {
   }
 
   const supportRadius =
-    anchors.reduce(
+    [...anchors.map((anchor) => ({ position: anchor.position, radius: zoneRadiusByType[anchor.zone.type] + 1.6 })), ...landmarkAnchors.map((anchor) => ({ position: anchor.position, radius: 1.9 }))].reduce(
       (maxDistance, anchor) =>
         Math.max(
           maxDistance,
-          Math.hypot(anchor.position[0], anchor.position[2]) + zoneRadiusByType[anchor.zone.type] + 1.6,
+          Math.hypot(anchor.position[0], anchor.position[2]) + anchor.radius,
         ),
       5.6,
     ) + 0.35;
@@ -123,6 +150,7 @@ export function buildStudioWorldLayout(zones: ZoneSpec[]): StudioWorldLayout {
 
   return {
     anchors,
+    landmarkAnchors,
     tileRadius,
     supportRadius,
     bounds: {

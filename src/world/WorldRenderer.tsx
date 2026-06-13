@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
-import type { SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
+import type { LandmarkSpec, SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
 import { buildStudioWorldLayout, type StudioWorldLayout } from "./studioWorldLayout";
 
 type WorldRendererProps = {
@@ -79,11 +79,15 @@ const BASE_TILE_SCALE = 1.002;
 
 export function WorldRenderer({ spec }: WorldRendererProps) {
   const palette = paletteByStyle[spec.style];
-  const layout = useMemo(() => buildStudioWorldLayout(spec.zones), [spec.zones]);
+  const layout = useMemo(() => buildStudioWorldLayout(spec.zones, spec.landmarks ?? []), [spec.landmarks, spec.zones]);
   const routeNetwork = useMemo(() => buildRouteNetwork(layout), [layout]);
   const anchorByZoneId = useMemo(
     () => new Map(layout.anchors.map((anchor) => [anchor.zone.id, anchor.position])),
     [layout.anchors],
+  );
+  const landmarkAnchorById = useMemo(
+    () => new Map(layout.landmarkAnchors.map((anchor) => [anchor.landmark.id, anchor.position])),
+    [layout.landmarkAnchors],
   );
   const mainStageAnchor = layout.anchors.find((anchor) => anchor.zone.type === "main_stage");
   const trackAnchor = layout.anchors.find((anchor) => anchor.zone.type === "track_zone");
@@ -104,6 +108,14 @@ export function WorldRenderer({ spec }: WorldRendererProps) {
       ) : null}
       {spec.zones.map((zone) => (
         <ZonePrefab key={zone.id} zone={zone} style={spec.style} overridePosition={anchorByZoneId.get(zone.id)} />
+      ))}
+      {(spec.landmarks ?? []).map((landmark) => (
+        <LandmarkPrefab
+          key={landmark.id}
+          landmark={landmark}
+          style={spec.style}
+          position={landmarkAnchorById.get(landmark.id) ?? [0, 0, 0]}
+        />
       ))}
     </group>
   );
@@ -245,6 +257,65 @@ function AnimatedSoldierModel({
   return <primitive ref={rootRef} object={scene} position={position} rotation={rotation} scale={scale} />;
 }
 
+function AnimatedLandmarkModel({
+  url,
+  position = [0, 0, 0],
+  rotation = [0, 0, 0],
+  scale = 1,
+  tint,
+  tintStrength = 0,
+}: ModelProps) {
+  const gltf = useGLTF(url);
+  const rootRef = useRef<THREE.Group>(null);
+
+  const scene = useMemo(() => {
+    const clone = cloneSkinned(gltf.scene) as THREE.Group;
+    const tintColor = tint ? new THREE.Color(tint) : null;
+
+    clone.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const nextMaterials = materials.map((material) => {
+        const nextMaterial = material.clone();
+        if (tintColor && "color" in nextMaterial && nextMaterial.color instanceof THREE.Color) {
+          nextMaterial.color.lerp(tintColor, tintStrength);
+        }
+        return nextMaterial;
+      });
+
+      mesh.material = Array.isArray(mesh.material) ? nextMaterials : nextMaterials[0];
+    });
+
+    return clone;
+  }, [gltf.scene, tint, tintStrength]);
+
+  const { actions } = useAnimations(gltf.animations, rootRef);
+
+  useEffect(() => {
+    const preferredNames = ["rotate", "spin", "idle", "animation", "Action"];
+    const preferred = preferredNames.map((name) => actions[name]).find(Boolean);
+    const fallback = Object.values(actions)[0];
+    const clip = preferred ?? fallback;
+    if (!clip) return;
+
+    clip.reset();
+    clip.fadeIn(0.2);
+    clip.play();
+
+    return () => {
+      clip.fadeOut(0.2);
+      clip.stop();
+    };
+  }, [actions]);
+
+  return <primitive ref={rootRef} object={scene} position={position} rotation={rotation} scale={scale} />;
+}
+
 function TransitSoldier({
   startPosition,
   endPosition,
@@ -344,6 +415,72 @@ function ZonePrefab({
       ) : null}
     </group>
   );
+}
+
+function LandmarkPrefab({
+  landmark,
+  style,
+  position,
+}: {
+  landmark: LandmarkSpec;
+  style: WorldStyle;
+  position: [number, number, number];
+}) {
+  const tintStrength = style === "game" ? 0.1 : style === "animation" ? 0.22 : 0.34;
+  const tint = style === "animation" ? "#8AD6FF" : style === "voxel" ? "#8BC779" : "#5E6B84";
+
+  switch (landmark.type) {
+    case "castle_outpost":
+      return (
+        <group position={position}>
+          <PrefabModel
+            url={`${hexAssetPath}building-castle.glb`}
+            position={[0, 0.2, 0]}
+            scale={0.72}
+            tint={tint}
+            tintStrength={tintStrength}
+          />
+        </group>
+      );
+    case "windmill":
+      return (
+        <group position={position}>
+          <AnimatedLandmarkModel
+            url={`${hexAssetPath}building-mill.glb`}
+            position={[0, 0.18, 0]}
+            scale={0.74}
+            tint={tint}
+            tintStrength={tintStrength}
+          />
+        </group>
+      );
+    case "watermill":
+      return (
+        <group position={position}>
+          <AnimatedLandmarkModel
+            url={`${hexAssetPath}building-watermill.glb`}
+            position={[0, 0.18, 0]}
+            scale={0.78}
+            tint={tint}
+            tintStrength={tintStrength}
+          />
+        </group>
+      );
+    case "wizard_tower":
+      return (
+        <group position={position}>
+          <PrefabModel
+            url={`${hexAssetPath}building-wizard-tower.glb`}
+            position={[0, 0.18, 0]}
+            scale={0.76}
+            tint={tint}
+            tintStrength={tintStrength}
+          />
+        </group>
+      );
+    default:
+      return null;
+  }
 }
 
 function ZoneMarker({ radius, color, accent }: { radius: number; color: string; accent: string }) {
@@ -1117,6 +1254,9 @@ function edgeCellsFromSet(edgeSet: Set<string>) {
   `${hexAssetPath}river-intersectionG.glb`,
   `${hexAssetPath}river-intersectionH.glb`,
   `${hexAssetPath}building-castle.glb`,
+  `${hexAssetPath}building-mill.glb`,
+  `${hexAssetPath}building-watermill.glb`,
+  `${hexAssetPath}building-wizard-tower.glb`,
   `${hexAssetPath}building-walls.glb`,
   `${hexAssetPath}unit-wall-tower.glb`,
   `${hexAssetPath}building-archery.glb`,

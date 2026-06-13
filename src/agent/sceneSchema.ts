@@ -22,6 +22,9 @@ const sceneConstraintSchema = z.enum([
   "sponsor_zone",
 ]);
 
+const landmarkTypeSchema = z.enum(["castle_outpost", "windmill", "watermill", "wizard_tower"]);
+const landmarkRegionSchema = z.enum(["north", "south", "east", "west", "center_ring", "outer_ring"]);
+
 const zoneSchema = z.object({
   id: z.string().min(2),
   type: zoneTypeSchema,
@@ -43,6 +46,13 @@ const proofSchema = z.object({
   source: z.enum(["mock_metadata", "testnet", "manual"]),
 });
 
+const landmarkSchema = z.object({
+  id: z.string().min(2),
+  type: landmarkTypeSchema,
+  title: z.string().min(2).max(48),
+  region: landmarkRegionSchema,
+});
+
 export const sceneSpecSchema = z.object({
   title: z.string().min(4).max(72),
   summary: z.string().max(160).optional(),
@@ -52,6 +62,7 @@ export const sceneSpecSchema = z.object({
   constraints: z.array(sceneConstraintSchema).optional(),
   zones: z.array(zoneSchema).min(4).max(12),
   web3Proofs: z.array(proofSchema).min(1).max(4),
+  landmarks: z.array(landmarkSchema).max(6).optional(),
 });
 
 type LooseRecord = Record<string, unknown>;
@@ -128,6 +139,35 @@ const constraintAliases: Record<string, z.infer<typeof sceneConstraintSchema>> =
   timeline: "timeline_corridor",
   sponsor_zone: "sponsor_zone",
   sponsor: "sponsor_zone",
+};
+
+const landmarkTypeAliases: Record<string, z.infer<typeof landmarkTypeSchema>> = {
+  castle_outpost: "castle_outpost",
+  castle: "castle_outpost",
+  outpost: "castle_outpost",
+  windmill: "windmill",
+  mill: "windmill",
+  building_mill: "windmill",
+  watermill: "watermill",
+  water_mill: "watermill",
+  building_watermill: "watermill",
+  wizard_tower: "wizard_tower",
+  wizardtower: "wizard_tower",
+  magic_tower: "wizard_tower",
+  mage_tower: "wizard_tower",
+};
+
+const landmarkRegionAliases: Record<string, z.infer<typeof landmarkRegionSchema>> = {
+  north: "north",
+  south: "south",
+  east: "east",
+  west: "west",
+  center: "center_ring",
+  center_ring: "center_ring",
+  middle: "center_ring",
+  outer: "outer_ring",
+  outer_ring: "outer_ring",
+  edge: "outer_ring",
 };
 
 const zoneDefaultColors: Record<z.infer<typeof zoneTypeSchema>, string> = {
@@ -296,6 +336,32 @@ function normalizeProof(input: unknown, fallbackType?: z.infer<typeof proofSchem
   };
 }
 
+function normalizeLandmark(input: unknown, index: number) {
+  const record = asRecord(input);
+  const type = parseAlias(record.type ?? record.kind ?? record.assetType, landmarkTypeAliases, "castle_outpost");
+  const title =
+    typeof record.title === "string"
+      ? record.title.trim()
+      : type === "windmill"
+        ? "Windmill"
+        : type === "watermill"
+          ? "Watermill"
+          : type === "wizard_tower"
+            ? "Wizard Tower"
+            : "Castle Outpost";
+  const region = parseAlias(record.region ?? record.area ?? record.anchor, landmarkRegionAliases, "outer_ring");
+
+  return {
+    id:
+      typeof record.id === "string" && record.id.trim().length >= 2
+        ? slugify(record.id)
+        : `${slugify(title) || type}-${index + 1}`,
+    type,
+    title,
+    region,
+  };
+}
+
 function normalizeWeb3Proofs(input: unknown, zones: Array<ReturnType<typeof normalizeZone>>) {
   const proofs: Array<ReturnType<typeof normalizeProof>> = [];
 
@@ -348,6 +414,13 @@ export function normalizeSceneSpecInput(input: unknown): SceneSpec {
         ? record.areas
         : [];
   const zones = zonesSource.map((zone, index) => normalizeZone(zone, index));
+  const landmarkSource = Array.isArray(record.landmarks)
+    ? record.landmarks
+    : Array.isArray(record.extras)
+      ? record.extras
+      : Array.isArray(record.landmarkModules)
+        ? record.landmarkModules
+        : [];
 
   return {
     title:
@@ -368,6 +441,7 @@ export function normalizeSceneSpecInput(input: unknown): SceneSpec {
       : undefined,
     zones,
     web3Proofs: normalizeWeb3Proofs(record.web3Proofs, zones),
+    landmarks: landmarkSource.map((landmark, index) => normalizeLandmark(landmark, index)).slice(0, 6),
   };
 }
 

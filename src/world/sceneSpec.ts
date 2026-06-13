@@ -8,6 +8,10 @@ export type ZoneType =
   | "nft_wall"
   | "wallet_badge";
 
+export type LandmarkType = "castle_outpost" | "windmill" | "watermill" | "wizard_tower";
+
+export type LandmarkRegion = "north" | "south" | "east" | "west" | "center_ring" | "outer_ring";
+
 export type WorldStyle = "game" | "animation" | "voxel";
 
 export type SceneTheme = "futuristic" | "minimal" | "industrial";
@@ -38,6 +42,13 @@ export type Web3ProofSpec = {
   source: "mock_metadata" | "testnet" | "manual";
 };
 
+export type LandmarkSpec = {
+  id: string;
+  type: LandmarkType;
+  title: string;
+  region: LandmarkRegion;
+};
+
 export type SceneSpec = {
   title: string;
   summary?: string;
@@ -47,4 +58,5 @@ export type SceneSpec = {
   constraints?: SceneConstraint[];
   zones: ZoneSpec[];
   web3Proofs: Web3ProofSpec[];
+  landmarks?: LandmarkSpec[];
 };
