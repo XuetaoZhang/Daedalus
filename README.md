@@ -13,6 +13,9 @@ It is designed as a real product surface rather than a single demo page:
 - `Home` presents the brand, value proposition, and a live 3D hero scene
 - `Studio` lets users enter prompts, watch the workflow progress, and inspect the generated 3D world
 
+### Demo Link
+https://daedalus-henna.vercel.app
+
 ### What Daedalus does
 
 - Converts product, event, community, and virtual-space briefs into structured 3D scene specs
@@ -121,6 +124,9 @@ Daedalus 是一个面向沉浸式 Web3 空间的 Agent 式 3D 世界生成平台
 
 - `Home` 用来展示品牌、产品价值和首屏 3D 场景
 - `Studio` 用来输入提示词、观察工作流，并查看生成出的 3D 世界
+
+### Demo Link
+https://daedalus-henna.vercel.app
 
 ### Daedalus 能做什么
 

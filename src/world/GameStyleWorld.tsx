@@ -1,7 +1,8 @@
 import { useFrame } from "@react-three/fiber";
-import { useGLTF } from "@react-three/drei";
-import { useMemo, useRef } from "react";
+import { useAnimations, useGLTF } from "@react-three/drei";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
+import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 
 const ground = "#d8cb9b";
 const groundEdge = "#b7aa7f";
@@ -52,6 +53,63 @@ function KenneyModel({ url, position = [0, 0, 0], rotation = [0, 0, 0], scale = 
   }, [gltf.scene, tint, tintStrength]);
 
   return <primitive object={scene} position={position} rotation={rotation} scale={scale} />;
+}
+
+function AnimatedSoldierModel({
+  position = [0, 0, 0],
+  rotation = [0, 0, 0],
+  scale = 1,
+  tint,
+  tintStrength = 0,
+  clip = "walk",
+}: Omit<ModelProps, "url"> & { clip?: string }) {
+  const gltf = useGLTF(`${arenaAssetPath}character-soldier.glb`);
+  const rootRef = useRef<THREE.Group>(null);
+
+  const scene = useMemo(() => {
+    const clone = cloneSkinned(gltf.scene) as THREE.Group;
+    const tintColor = tint ? new THREE.Color(tint) : null;
+
+    clone.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      const nextMaterials = materials.map((material) => {
+        const nextMaterial = material.clone();
+        if (tintColor && "color" in nextMaterial && nextMaterial.color instanceof THREE.Color) {
+          nextMaterial.color.lerp(tintColor, tintStrength);
+        }
+        return nextMaterial;
+      });
+
+      mesh.material = Array.isArray(mesh.material) ? nextMaterials : nextMaterials[0];
+    });
+
+    return clone;
+  }, [gltf.scene, tint, tintStrength]);
+
+  const { actions } = useAnimations(gltf.animations, rootRef);
+
+  useEffect(() => {
+    const requested = actions[clip] ?? actions.walk ?? actions.idle ?? Object.values(actions)[0];
+    if (!requested) return;
+
+    requested.reset();
+    requested.fadeIn(0.18);
+    requested.play();
+    requested.timeScale = clip === "walk" ? 1.2 : 1;
+
+    return () => {
+      requested.fadeOut(0.18);
+      requested.stop();
+    };
+  }, [actions, clip]);
+
+  return <primitive ref={rootRef} object={scene} position={position} rotation={rotation} scale={scale} />;
 }
 
 function useFloatMotion({
@@ -164,9 +222,25 @@ export function GameStyleWorld() {
       <Barricades position={[-4.35, 0.16, 3.35]} />
       <Hill position={[-4.8, 0.08, 0.35]} />
       <Forest />
-      <ArmyCluster color="#2f6fb7" position={[0, 0.22, 3.35]} rows={3} lead />
-      <ArmyCluster color="#b95045" position={[0.7, 0.22, 0.55]} rows={2} />
-      <ArmyCluster color="#d6af35" position={[1.75, 0.22, 0.65]} rows={2} />
+      <ArmyCluster color="#2f6fb7" position={[0, 0.22, 3.55]} rows={2} lead />
+      <RoadPatrolColumn
+        color="#2f6fb7"
+        points={[[0.05, 3.65], [0.28, 2.55], [0.72, 1.38], [0.6, 0.18], [0.12, -1.08], [0.04, -2.55], [0.12, -4.2]]}
+        count={6}
+        spacing={0.08}
+        speed={0.048}
+        laneOffset={-0.18}
+        scale={0.42}
+      />
+      <RoadPatrolColumn
+        color="#b95045"
+        points={[[0.12, -4.2], [0.04, -2.55], [0.12, -1.08], [0.6, 0.18], [0.72, 1.38], [0.28, 2.55], [0.05, 3.65]]}
+        count={6}
+        spacing={0.08}
+        speed={0.046}
+        laneOffset={0.18}
+        scale={0.42}
+      />
       <MarchPath points={[[0, 4.65], [0.15, 3.35], [0.75, 2.15], [1.35, 0.95]]} color="#2f6fb7" />
       <MarchPath points={[[0.25, 3.45], [-1.25, 2.75], [-3.2, 3.25]]} color="#2f6fb7" />
       <MarchPath points={[[1.1, 3.2], [2.45, 2.8], [3.7, 2.15]]} color="#2f6fb7" />
@@ -608,7 +682,7 @@ function Soldier({
   return (
     <group position={position} rotation={[0, rotation, 0]}>
       <group ref={marchRef}>
-        <KenneyModel url={`${arenaAssetPath}character-soldier.glb`} scale={leader ? scale * 1.25 : scale} tint={color} tintStrength={0.5} />
+        <AnimatedSoldierModel scale={leader ? scale * 1.25 : scale} tint={color} tintStrength={0.5} clip="walk" />
       </group>
       {leader ? (
         <mesh position={[0, 0.45, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -619,6 +693,111 @@ function Soldier({
     </group>
   );
 }
+
+function RoadPatrolColumn({
+  color,
+  points,
+  count,
+  spacing = 0.08,
+  speed = 0.05,
+  laneOffset = 0,
+  scale = 0.4,
+}: {
+  color: string;
+  points: Vec2[];
+  count: number;
+  spacing?: number;
+  speed?: number;
+  laneOffset?: number;
+  scale?: number;
+}) {
+  const curve = useMemo(
+    () =>
+      new THREE.CatmullRomCurve3(
+        points.map(([x, z]) => new THREE.Vector3(x, 0, z)),
+        false,
+        "catmullrom",
+        0.12,
+      ),
+    [points],
+  );
+
+  return (
+    <group>
+      {Array.from({ length: count }, (_, index) => (
+        <PathWalker
+          key={`${color}-${index}`}
+          curve={curve}
+          color={color}
+          offset={(index * spacing) % 1}
+          speed={speed}
+          laneOffset={laneOffset}
+          scale={scale}
+          phase={index * 0.42}
+          leader={index === 0}
+        />
+      ))}
+    </group>
+  );
+}
+
+function PathWalker({
+  curve,
+  color,
+  offset,
+  speed,
+  laneOffset,
+  scale,
+  phase,
+  leader = false,
+}: {
+  curve: THREE.CatmullRomCurve3;
+  color: string;
+  offset: number;
+  speed: number;
+  laneOffset: number;
+  scale: number;
+  phase: number;
+  leader?: boolean;
+}) {
+  const groupRef = useRef<THREE.Group>(null);
+  const current = useMemo(() => new THREE.Vector3(), []);
+  const next = useMemo(() => new THREE.Vector3(), []);
+  const tangent = useMemo(() => new THREE.Vector3(), []);
+  const side = useMemo(() => new THREE.Vector3(), []);
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+
+    const t = (offset + state.clock.elapsedTime * speed) % 1;
+    const lookT = (t + 0.01) % 1;
+    curve.getPointAt(t, current);
+    curve.getPointAt(lookT, next);
+
+    tangent.subVectors(next, current).normalize();
+    side.set(-tangent.z, 0, tangent.x).normalize().multiplyScalar(laneOffset);
+
+    groupRef.current.position.set(current.x + side.x, 0, current.z + side.z);
+    groupRef.current.rotation.y = Math.atan2(next.x - current.x, next.z - current.z + 0.0001);
+  });
+
+  return (
+    <group ref={groupRef}>
+      <group position={[0, 0, 0]}>
+        <Soldier
+          color={color}
+          position={[0, 0, 0]}
+          scale={leader ? scale * 1.08 : scale}
+          leader={leader}
+          phase={phase}
+          stride={leader ? 0.028 : 0.02}
+        />
+      </group>
+    </group>
+  );
+}
+
+useGLTF.preload(`${arenaAssetPath}character-soldier.glb`);
 
 function MarchPath({ points, color }: { points: Vec2[]; color: string }) {
   const dots = points.flatMap((point, index) => {
