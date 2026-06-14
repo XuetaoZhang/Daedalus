@@ -6,7 +6,7 @@ import type {
   ValidationIssue,
 } from "./types";
 import { parseSceneSpec } from "./sceneSchema";
-import { runtimeConfig } from "./runtimeConfig";
+import { runtimeConfig, shouldUseServerProxy } from "./runtimeConfig";
 import { buildMockSceneSpec } from "./mockPlanner";
 import type { SceneSpec } from "../world/sceneSpec";
 
@@ -139,31 +139,45 @@ function buildCompletionPrompt(request: StudioGenerationRequest, spec: SceneSpec
   ].join("\n");
 }
 
+async function requestDeepSeek(action: "generate" | "repair" | "completion", body: Record<string, unknown>) {
+  const useProxy = shouldUseServerProxy();
+  const endpoint = useProxy
+    ? `/api/${action}`
+    : `${runtimeConfig.deepseekBaseUrl}/chat/completions`;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+
+  if (!useProxy) {
+    headers.Authorization = `Bearer ${runtimeConfig.deepseekApiKey}`;
+  }
+
+  return fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
 const deepSeekProvider: PlannerProvider = {
   id: "deepseek",
   label: DISPLAY_PROVIDER_LIVE,
   async generate(request) {
-    const response = await fetch(`${runtimeConfig.deepseekBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${runtimeConfig.deepseekApiKey}`,
-      },
-      body: JSON.stringify({
-        model: runtimeConfig.deepseekModel,
-        temperature: 0.3,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a precise structured-output planner for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
-          },
-          {
-            role: "user",
-            content: buildPlannerPrompt(request),
-          },
-        ],
-      }),
+    const response = await requestDeepSeek("generate", {
+      model: runtimeConfig.deepseekModel,
+      temperature: 0.3,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise structured-output planner for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
+        },
+        {
+          role: "user",
+          content: buildPlannerPrompt(request),
+        },
+      ],
     });
 
     if (!response.ok) {
@@ -197,27 +211,20 @@ const deepSeekProvider: PlannerProvider = {
       };
     }
 
-    const response = await fetch(`${runtimeConfig.deepseekBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${runtimeConfig.deepseekApiKey}`,
-      },
-      body: JSON.stringify({
-        model: runtimeConfig.deepseekModel,
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a precise structured-output repair planner for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
-          },
-          {
-            role: "user",
-            content: buildRepairPrompt(request, spec, issues),
-          },
-        ],
-      }),
+    const response = await requestDeepSeek("repair", {
+      model: runtimeConfig.deepseekModel,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise structured-output repair planner for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
+        },
+        {
+          role: "user",
+          content: buildRepairPrompt(request, spec, issues),
+        },
+      ],
     });
 
     if (!response.ok) {
@@ -249,27 +256,20 @@ const deepSeekProvider: PlannerProvider = {
     };
   },
   async decideCompletion(request, spec, issues) {
-    const response = await fetch(`${runtimeConfig.deepseekBaseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${runtimeConfig.deepseekApiKey}`,
-      },
-      body: JSON.stringify({
-        model: runtimeConfig.deepseekModel,
-        temperature: 0.2,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are a precise structured-output completion evaluator for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
-          },
-          {
-            role: "user",
-            content: buildCompletionPrompt(request, spec, issues),
-          },
-        ],
-      }),
+    const response = await requestDeepSeek("completion", {
+      model: runtimeConfig.deepseekModel,
+      temperature: 0.2,
+      messages: [
+        {
+          role: "system",
+          content:
+            "You are a precise structured-output completion evaluator for a Web3 3D world builder. Return valid JSON only and do not include commentary.",
+        },
+        {
+          role: "user",
+          content: buildCompletionPrompt(request, spec, issues),
+        },
+      ],
     });
 
     if (!response.ok) {
@@ -333,7 +333,7 @@ const mockProvider: PlannerProvider = {
 };
 
 export async function generatePlannedScene(request: StudioGenerationRequest): Promise<PlannerOutput> {
-  if (runtimeConfig.deepseekApiKey) {
+  if (runtimeConfig.deepseekApiKey || shouldUseServerProxy()) {
     try {
       return await deepSeekProvider.generate(request);
     } catch (error) {
@@ -350,7 +350,7 @@ export async function decideSceneRepair(
   spec: SceneSpec,
   issues: ValidationIssue[],
 ): Promise<RepairDecision> {
-  if (runtimeConfig.deepseekApiKey) {
+  if (runtimeConfig.deepseekApiKey || shouldUseServerProxy()) {
     try {
       return await deepSeekProvider.decideRepair(request, spec, issues);
     } catch (error) {
@@ -367,7 +367,7 @@ export async function decideSceneCompletion(
   spec: SceneSpec,
   issues: ValidationIssue[],
 ): Promise<CompletionDecision> {
-  if (runtimeConfig.deepseekApiKey) {
+  if (runtimeConfig.deepseekApiKey || shouldUseServerProxy()) {
     try {
       return await deepSeekProvider.decideCompletion(request, spec, issues);
     } catch (error) {

@@ -3,4 +3,5 @@ declare const __DAEDALUS_RUNTIME_CONFIG__: {
   glmApiKey: string;
   deepseekModel: string;
   deepseekBaseUrl: string;
+  useServerProxy: boolean;
 };

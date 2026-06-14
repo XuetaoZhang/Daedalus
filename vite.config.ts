@@ -18,6 +18,14 @@ export default defineConfig(({ mode }) => {
     deepseekModel: env.DEEPSEEK_MODEL || env.VITE_DEEPSEEK_MODEL || "deepseek-chat",
     deepseekBaseUrl:
       env.DEEPSEEK_BASE_URL || env.VITE_DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    useServerProxy:
+      (env.VITE_USE_SERVER_PROXY || "").toLowerCase() === "true" ||
+      (!(
+        env["DEEPSEEK-API-KEY"] ||
+        env.DEEPSEEK_API_KEY ||
+        env.VITE_DEEPSEEK_API_KEY
+      ) &&
+        mode !== "development"),
   };
 
   return {
