@@ -376,7 +376,7 @@ export function createIdleStudioSnapshot(): StudioWorkflowSnapshot {
     demoSceneSpec,
     [],
     [],
-    "Mock Planner",
+    "GLM Demo Planner",
     "Ready for a new world brief.",
   );
 }

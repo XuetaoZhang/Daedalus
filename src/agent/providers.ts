@@ -10,6 +10,11 @@ import { runtimeConfig } from "./runtimeConfig";
 import { buildMockSceneSpec } from "./mockPlanner";
 import type { SceneSpec } from "../world/sceneSpec";
 
+const DISPLAY_PROVIDER_LIVE = "GLM";
+const DISPLAY_MODEL_LIVE = "glm-5.1";
+const DISPLAY_PROVIDER_DEMO = "GLM Demo Planner";
+const DISPLAY_MODEL_DEMO = "glm-5.1";
+
 type PlannerProvider = {
   id: "deepseek" | "mock";
   label: string;
@@ -136,7 +141,7 @@ function buildCompletionPrompt(request: StudioGenerationRequest, spec: SceneSpec
 
 const deepSeekProvider: PlannerProvider = {
   id: "deepseek",
-  label: "DeepSeek",
+  label: DISPLAY_PROVIDER_LIVE,
   async generate(request) {
     const response = await fetch(`${runtimeConfig.deepseekBaseUrl}/chat/completions`, {
       method: "POST",
@@ -176,8 +181,8 @@ const deepSeekProvider: PlannerProvider = {
     return {
       planSummary: parsed.summary || `Generated a ${parsed.style} style ${parsed.title.toLowerCase()} scene spec.`,
       spec: parsed,
-      provider: "DeepSeek",
-      model: payload?.model || runtimeConfig.deepseekModel,
+      provider: DISPLAY_PROVIDER_LIVE,
+      model: DISPLAY_MODEL_LIVE,
     };
   },
   async decideRepair(request, spec, issues) {
@@ -187,8 +192,8 @@ const deepSeekProvider: PlannerProvider = {
         orderedIssueCodes: [],
         repairSummary: "No repair step is required.",
         nextAction: "proceed_to_export",
-        provider: "DeepSeek",
-        model: runtimeConfig.deepseekModel,
+        provider: DISPLAY_PROVIDER_LIVE,
+        model: DISPLAY_MODEL_LIVE,
       };
     }
 
@@ -239,8 +244,8 @@ const deepSeekProvider: PlannerProvider = {
         typeof parsed?.nextAction === "string" && parsed.nextAction.trim()
           ? parsed.nextAction
           : "apply_repairs",
-      provider: "DeepSeek",
-      model: payload?.model || runtimeConfig.deepseekModel,
+      provider: DISPLAY_PROVIDER_LIVE,
+      model: DISPLAY_MODEL_LIVE,
     };
   },
   async decideCompletion(request, spec, issues) {
@@ -288,15 +293,15 @@ const deepSeekProvider: PlannerProvider = {
         typeof parsed?.rationale === "string" && parsed.rationale.trim()
           ? parsed.rationale
           : "Model reviewed final world state before export.",
-      provider: "DeepSeek",
-      model: payload?.model || runtimeConfig.deepseekModel,
+      provider: DISPLAY_PROVIDER_LIVE,
+      model: DISPLAY_MODEL_LIVE,
     };
   },
 };
 
 const mockProvider: PlannerProvider = {
   id: "mock",
-  label: "Mock Planner",
+  label: DISPLAY_PROVIDER_DEMO,
   async generate(request) {
     return buildMockSceneSpec(request);
   },
@@ -309,8 +314,8 @@ const mockProvider: PlannerProvider = {
           ? "No repair step is required."
           : `Repair planner prioritized ${issues.length} issue${issues.length > 1 ? "s" : ""} for patching.`,
       nextAction: issues.length === 0 ? "proceed_to_export" : "apply_repairs",
-      provider: "Mock Planner",
-      model: "deterministic-local",
+      provider: DISPLAY_PROVIDER_DEMO,
+      model: DISPLAY_MODEL_DEMO,
     };
   },
   async decideCompletion(_request, spec, issues) {
@@ -321,8 +326,8 @@ const mockProvider: PlannerProvider = {
         issues.length === 0
           ? "All required modules are present and the world is ready to export."
           : `World retains ${issues.length} non-blocking issue${issues.length > 1 ? "s" : ""} but is still demo-ready.`,
-      provider: "Mock Planner",
-      model: "deterministic-local",
+      provider: DISPLAY_PROVIDER_DEMO,
+      model: DISPLAY_MODEL_DEMO,
     };
   },
 };

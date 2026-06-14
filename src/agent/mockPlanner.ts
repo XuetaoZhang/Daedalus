@@ -1,6 +1,9 @@
 import type { LandmarkIntent, PlannerOutput, StudioGenerationRequest, WorldTypeMap } from "./types";
 import type { LandmarkSpec, SceneSpec, Web3ProofSpec, ZoneSpec } from "../world/sceneSpec";
 
+const DISPLAY_PROVIDER_DEMO = "GLM Demo Planner";
+const DISPLAY_MODEL_DEMO = "glm-5.1";
+
 const worldTypeMap: WorldTypeMap = {
   hackathon_arena: "web3_demo_day",
   dao_hall: "dao_hall",
@@ -247,7 +250,7 @@ export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOut
   return {
     planSummary: `Planned a ${request.style} style ${worldTitle.toLowerCase()} with ${zones.length} core zones and ${web3Proofs.length} proof modules.`,
     spec,
-    provider: "Mock Planner",
-    model: "deterministic-local",
+    provider: DISPLAY_PROVIDER_DEMO,
+    model: DISPLAY_MODEL_DEMO,
   };
 }
