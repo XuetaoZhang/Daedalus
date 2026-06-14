@@ -23,7 +23,18 @@ const sceneConstraintSchema = z.enum([
 ]);
 
 const landmarkTypeSchema = z.enum(["castle_outpost", "windmill", "watermill", "wizard_tower"]);
-const landmarkRegionSchema = z.enum(["north", "south", "east", "west", "center_ring", "outer_ring"]);
+const landmarkRegionSchema = z.enum([
+  "north",
+  "south",
+  "east",
+  "west",
+  "northwest",
+  "northeast",
+  "southwest",
+  "southeast",
+  "center_ring",
+  "outer_ring",
+]);
 
 const zoneSchema = z.object({
   id: z.string().min(2),
@@ -162,12 +173,48 @@ const landmarkRegionAliases: Record<string, z.infer<typeof landmarkRegionSchema>
   south: "south",
   east: "east",
   west: "west",
+  northwest: "northwest",
+  northeast: "northeast",
+  southwest: "southwest",
+  southeast: "southeast",
+  top_left: "northwest",
+  upper_left: "northwest",
+  left_top: "northwest",
+  top_right: "northeast",
+  upper_right: "northeast",
+  right_top: "northeast",
+  bottom_left: "southwest",
+  lower_left: "southwest",
+  left_bottom: "southwest",
+  bottom_right: "southeast",
+  lower_right: "southeast",
+  right_bottom: "southeast",
   center: "center_ring",
   center_ring: "center_ring",
   middle: "center_ring",
   outer: "outer_ring",
   outer_ring: "outer_ring",
   edge: "outer_ring",
+  north_west: "northwest",
+  north_east: "northeast",
+  south_west: "southwest",
+  south_east: "southeast",
+  左上: "northwest",
+  右上: "northeast",
+  左下: "southwest",
+  右下: "southeast",
+  上方: "north",
+  下方: "south",
+  左侧: "west",
+  右侧: "east",
+  北侧: "north",
+  南侧: "south",
+  东侧: "east",
+  西侧: "west",
+  东北: "northeast",
+  西北: "northwest",
+  东南: "southeast",
+  西南: "southwest",
 };
 
 const zoneDefaultColors: Record<z.infer<typeof zoneTypeSchema>, string> = {

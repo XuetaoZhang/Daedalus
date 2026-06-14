@@ -895,7 +895,7 @@ function computeStudioCameraView(sceneSpec: SceneSpec) {
     };
   }
 
-  const layout = buildStudioWorldLayout(sceneSpec.zones);
+  const layout = buildStudioWorldLayout(sceneSpec.zones, sceneSpec.landmarks ?? []);
   const width = Math.max(8, layout.bounds.maxX - layout.bounds.minX);
   const depth = Math.max(8, layout.bounds.maxZ - layout.bounds.minZ);
   const span = Math.max(width, depth, layout.supportRadius * 1.9);

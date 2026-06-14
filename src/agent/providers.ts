@@ -69,7 +69,7 @@ function buildPlannerPrompt(request: StudioGenerationRequest) {
     "Use 4 to 8 zones.",
     "Allowed zone types: entrance, main_stage, track_zone, project_booth, sponsor_zone, timeline, nft_wall, wallet_badge.",
     "Allowed landmark types: castle_outpost, windmill, watermill, wizard_tower.",
-    "Allowed landmark regions: north, south, east, west, center_ring, outer_ring.",
+    "Allowed landmark regions: north, south, east, west, northwest, northeast, southwest, southeast, center_ring, outer_ring.",
     "Every zone must include exactly these keys: id, type, title, subtitle, position, color, accent, interactions.",
     "Every landmark must include exactly these keys: id, type, title, region.",
     "Do not use the keys label, size, or world.",

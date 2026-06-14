@@ -95,12 +95,16 @@ export function buildStudioWorldLayout(zones: ZoneSpec[], landmarks: LandmarkSpe
 
   const landmarkAnchors: LandmarkAnchor[] = [];
   const regionCells: Record<LandmarkRegion, HexCellCoord> = {
-    north: { q: 0, r: 7 },
-    south: { q: 0, r: -5 },
-    east: { q: 6, r: 1 },
-    west: { q: -6, r: 2 },
+    north: { q: 0, r: -6 },
+    south: { q: 0, r: 6 },
+    east: { q: 6, r: 0 },
+    west: { q: -6, r: 0 },
+    northwest: { q: -5, r: -4 },
+    northeast: { q: 5, r: -5 },
+    southwest: { q: -5, r: 5 },
+    southeast: { q: 5, r: 4 },
     center_ring: { q: 3, r: -2 },
-    outer_ring: { q: -1, r: 7 },
+    outer_ring: { q: 0, r: 8 },
   };
 
   for (const landmark of landmarks) {

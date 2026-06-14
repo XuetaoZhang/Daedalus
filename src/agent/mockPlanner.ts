@@ -37,23 +37,124 @@ function makeZone(id: string, type: ZoneSpec["type"], title: string, subtitle: s
   return { id, type, title, subtitle, position, color, accent };
 }
 
+type LandmarkKeywordSpec = {
+  type: LandmarkIntent["type"];
+  title: string;
+  keywords: string[];
+  fallbackRegion: LandmarkIntent["region"];
+};
+
+const landmarkKeywordSpecs: LandmarkKeywordSpec[] = [
+  {
+    type: "watermill",
+    title: "Watermill",
+    keywords: ["watermill", "water mill", "水车"],
+    fallbackRegion: "west",
+  },
+  {
+    type: "windmill",
+    title: "Windmill",
+    keywords: ["windmill", "wind mill", "风车", "mill"],
+    fallbackRegion: "north",
+  },
+  {
+    type: "wizard_tower",
+    title: "Wizard Tower",
+    keywords: ["wizard tower", "magic tower", "mage tower", "wizard", "魔法塔"],
+    fallbackRegion: "south",
+  },
+  {
+    type: "castle_outpost",
+    title: "Castle Outpost",
+    keywords: ["small castle", "castle outpost", "outpost", "城堡", "小城堡", "castle"],
+    fallbackRegion: "east",
+  },
+];
+
+const directionalHints: Array<{ phrases: string[]; region: LandmarkIntent["region"]; priority: number }> = [
+  { phrases: ["左上角", "左上", "top left", "upper left"], region: "northwest", priority: 5 },
+  { phrases: ["右上角", "右上", "top right", "upper right"], region: "northeast", priority: 5 },
+  { phrases: ["左下角", "左下", "bottom left", "lower left"], region: "southwest", priority: 5 },
+  { phrases: ["右下角", "右下", "bottom right", "lower right"], region: "southeast", priority: 5 },
+  { phrases: ["西北角", "西北", "northwest", "north west"], region: "northwest", priority: 4 },
+  { phrases: ["东北角", "东北", "northeast", "north east"], region: "northeast", priority: 4 },
+  { phrases: ["西南角", "西南", "southwest", "south west"], region: "southwest", priority: 4 },
+  { phrases: ["东南角", "东南", "southeast", "south east"], region: "southeast", priority: 4 },
+  { phrases: ["北侧", "北边", "上方", "顶部", "north side", "north"], region: "north", priority: 3 },
+  { phrases: ["南侧", "南边", "下方", "底部", "south side", "south"], region: "south", priority: 3 },
+  { phrases: ["东侧", "右侧", "右边", "east side", "east"], region: "east", priority: 3 },
+  { phrases: ["西侧", "左侧", "左边", "west side", "west"], region: "west", priority: 3 },
+  { phrases: ["中心环", "中圈", "center ring", "middle ring"], region: "center_ring", priority: 2 },
+  { phrases: ["外围", "外圈", "outer ring", "edge"], region: "outer_ring", priority: 2 },
+];
+
+function findKeywordIndex(prompt: string, keywords: string[]) {
+  let bestIndex = -1;
+  let bestLength = -1;
+
+  for (const keyword of keywords) {
+    const index = prompt.indexOf(keyword);
+    if (index === -1) continue;
+    if (bestIndex === -1 || keyword.length > bestLength || (keyword.length === bestLength && index < bestIndex)) {
+      bestIndex = index;
+      bestLength = keyword.length;
+    }
+  }
+
+  return { index: bestIndex, length: Math.max(bestLength, 0) };
+}
+
+function inferRegionNearKeyword(prompt: string, keywordIndex: number, keywordLength: number, fallback: LandmarkIntent["region"]) {
+  const searchStart = Math.max(0, keywordIndex - 18);
+  const searchEnd = Math.min(prompt.length, keywordIndex + keywordLength + 18);
+  const localWindow = prompt.slice(searchStart, searchEnd);
+
+  let bestMatch: { region: LandmarkIntent["region"]; priority: number; distance: number } | null = null;
+
+  for (const hint of directionalHints) {
+    for (const phrase of hint.phrases) {
+      const localIndex = localWindow.indexOf(phrase);
+      if (localIndex === -1) continue;
+      const distance = Math.abs((searchStart + localIndex) - keywordIndex);
+      if (
+        !bestMatch ||
+        hint.priority > bestMatch.priority ||
+        (hint.priority === bestMatch.priority && distance < bestMatch.distance)
+      ) {
+        bestMatch = {
+          region: hint.region,
+          priority: hint.priority,
+          distance,
+        };
+      }
+    }
+  }
+
+  if (bestMatch) return bestMatch.region;
+
+  for (const hint of directionalHints) {
+    for (const phrase of hint.phrases) {
+      const globalIndex = prompt.indexOf(phrase);
+      if (globalIndex === -1) continue;
+      return hint.region;
+    }
+  }
+
+  return fallback;
+}
+
 function inferLandmarks(prompt: string): LandmarkIntent[] {
   const intents: LandmarkIntent[] = [];
 
-  if (prompt.includes("castle") || prompt.includes("城堡")) {
-    intents.push({ type: "castle_outpost", region: "east", title: "Castle Outpost" });
-  }
+  for (const spec of landmarkKeywordSpecs) {
+    const { index, length } = findKeywordIndex(prompt, spec.keywords);
+    if (index === -1) continue;
 
-  if (prompt.includes("windmill") || prompt.includes("风车") || prompt.includes("mill")) {
-    intents.push({ type: "windmill", region: "north", title: "Windmill" });
-  }
-
-  if (prompt.includes("watermill") || prompt.includes("水车")) {
-    intents.push({ type: "watermill", region: "west", title: "Watermill" });
-  }
-
-  if (prompt.includes("wizard") || prompt.includes("magic tower") || prompt.includes("魔法塔")) {
-    intents.push({ type: "wizard_tower", region: "south", title: "Wizard Tower" });
+    intents.push({
+      type: spec.type,
+      title: spec.title,
+      region: inferRegionNearKeyword(prompt, index, length, spec.fallbackRegion),
+    });
   }
 
   return intents.slice(0, 4);

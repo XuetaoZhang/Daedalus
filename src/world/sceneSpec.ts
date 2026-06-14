@@ -10,7 +10,17 @@ export type ZoneType =
 
 export type LandmarkType = "castle_outpost" | "windmill" | "watermill" | "wizard_tower";
 
-export type LandmarkRegion = "north" | "south" | "east" | "west" | "center_ring" | "outer_ring";
+export type LandmarkRegion =
+  | "north"
+  | "south"
+  | "east"
+  | "west"
+  | "northwest"
+  | "northeast"
+  | "southwest"
+  | "southeast"
+  | "center_ring"
+  | "outer_ring";
 
 export type WorldStyle = "game" | "animation" | "voxel";
 
