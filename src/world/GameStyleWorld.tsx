@@ -181,27 +181,6 @@ function useMarchMotion({
   return ref;
 }
 
-function useFormationPatrol({
-  xAmplitude = 0.14,
-  zAmplitude = 0.18,
-  phase = 0,
-}: {
-  xAmplitude?: number;
-  zAmplitude?: number;
-  phase?: number;
-}) {
-  const ref = useRef<THREE.Group>(null);
-
-  useFrame((state) => {
-    if (!ref.current) return;
-    const t = state.clock.elapsedTime * 0.6 + phase;
-    ref.current.position.x = Math.sin(t) * xAmplitude;
-    ref.current.position.z = Math.cos(t * 1.15) * zAmplitude;
-  });
-
-  return ref;
-}
-
 export function GameStyleWorld() {
   return (
     <group rotation={[0, -0.08, 0]} position={[0, -0.2, 0]}>
@@ -222,23 +201,16 @@ export function GameStyleWorld() {
       <Barricades position={[-4.35, 0.16, 3.35]} />
       <Hill position={[-4.8, 0.08, 0.35]} />
       <Forest />
-      <ArmyCluster color="#2f6fb7" position={[0, 0.22, 3.55]} rows={2} lead />
-      <RoadPatrolColumn
+      <ExpeditionSquad
         color="#2f6fb7"
-        points={[[0.05, 3.65], [0.28, 2.55], [0.72, 1.38], [0.6, 0.18], [0.12, -1.08], [0.04, -2.55], [0.12, -4.2]]}
+        routes={[
+          [[0.02, 4.3], [0.18, 3.25], [0.62, 2.02], [0.6, 0.72], [0.12, -1.08], [0.04, -2.55], [0.08, -4.55]],
+          [[0.08, -4.55], [0.16, -3.3], [0.95, -2.45], [2.15, -2.25], [3.38, -2.18], [4.58, -2.08]],
+          [[4.58, -2.08], [3.38, -2.18], [2.15, -2.25], [0.95, -2.45], [0.16, -3.3], [0.08, -4.55], [0.04, -2.55], [0.12, -1.08], [0.6, 0.72], [0.62, 2.02], [0.18, 3.25], [0.02, 4.3]],
+        ]}
         count={6}
-        spacing={0.08}
-        speed={0.048}
-        laneOffset={-0.18}
-        scale={0.42}
-      />
-      <RoadPatrolColumn
-        color="#b95045"
-        points={[[0.12, -4.2], [0.04, -2.55], [0.12, -1.08], [0.6, 0.18], [0.72, 1.38], [0.28, 2.55], [0.05, 3.65]]}
-        count={6}
-        spacing={0.08}
-        speed={0.046}
-        laneOffset={0.18}
+        spacing={0.42}
+        speed={2.2}
         scale={0.42}
       />
       <MarchPath points={[[0, 4.65], [0.15, 3.35], [0.75, 2.15], [1.35, 0.95]]} color="#2f6fb7" />
@@ -611,55 +583,6 @@ function Rock({ position }: { position: [number, number, number] }) {
   );
 }
 
-function ArmyCluster({
-  color,
-  position,
-  rows,
-  lead = false,
-}: {
-  color: string;
-  position: [number, number, number];
-  rows: number;
-  lead?: boolean;
-}) {
-  const patrolRef = useFormationPatrol({
-    xAmplitude: lead ? 0.08 : 0.14,
-    zAmplitude: lead ? 0.16 : 0.22,
-    phase: position[0] * 0.5 + position[2] * 0.4,
-  });
-
-  const units = Array.from({ length: rows * 5 }, (_, index) => {
-    const row = Math.floor(index / 5);
-    const col = index % 5;
-    return {
-      position: [col * 0.42 - 0.84, row * 0.36 - 0.32] as Vec2,
-    };
-  });
-
-  return (
-    <group position={position}>
-      <group ref={patrolRef}>
-      <mesh position={[0, -0.015, 0.03]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[lead ? 1.24 : 0.95, 32]} />
-        <meshBasicMaterial color={color} transparent opacity={lead ? 0.2 : 0.14} />
-      </mesh>
-      {units.map((unit, index) => (
-        <Soldier
-          key={index}
-          color={color}
-          position={[unit.position[0], 0, unit.position[1]]}
-          rotation={index % 2 === 0 ? 0.18 : -0.18}
-          phase={index * 0.5 + position[0] * 0.3}
-          stride={lead ? 0.05 : 0.08}
-        />
-      ))}
-      <AssetBanner position={[0, lead ? 1.12 : 0.92, -0.42]} color={color} scale={lead ? 0.22 : 0.18} />
-      {lead ? <Soldier color={color} position={[0, 0.02, -0.82]} scale={0.46} leader phase={9.5} stride={0.08} /> : null}
-      </group>
-    </group>
-  );
-}
-
 function Soldier({
   color,
   position,
@@ -694,90 +617,114 @@ function Soldier({
   );
 }
 
-function RoadPatrolColumn({
+function ExpeditionSquad({
   color,
-  points,
+  routes,
   count,
-  spacing = 0.08,
-  speed = 0.05,
-  laneOffset = 0,
+  spacing = 0.42,
+  speed = 2.2,
   scale = 0.4,
 }: {
   color: string;
-  points: Vec2[];
+  routes: Vec2[][];
   count: number;
   spacing?: number;
   speed?: number;
-  laneOffset?: number;
   scale?: number;
 }) {
-  const curve = useMemo(
+  const segments = useMemo(
     () =>
-      new THREE.CatmullRomCurve3(
-        points.map(([x, z]) => new THREE.Vector3(x, 0, z)),
-        false,
-        "catmullrom",
-        0.12,
+      routes.map(
+        (points) => ({
+          curve: new THREE.CatmullRomCurve3(
+            points.map(([x, z]) => new THREE.Vector3(x, 0, z)),
+            false,
+            "catmullrom",
+            0.12,
+          ),
+        }),
       ),
-    [points],
+    [routes],
+  );
+  const segmentMeta = useMemo(
+    () =>
+      segments.map(({ curve }) => {
+        const leaderDuration = curve.getLength() / speed;
+        const segmentDuration = leaderDuration + spacing * (count - 1);
+        return { curve, leaderDuration, segmentDuration };
+      }),
+    [count, segments, spacing, speed],
+  );
+  const cycleDuration = useMemo(
+    () => segmentMeta.reduce((sum, segment) => sum + segment.segmentDuration, 0),
+    [segmentMeta],
   );
 
   return (
     <group>
       {Array.from({ length: count }, (_, index) => (
-        <PathWalker
+        <SegmentWalker
           key={`${color}-${index}`}
-          curve={curve}
+          segments={segmentMeta}
           color={color}
-          offset={(index * spacing) % 1}
-          speed={speed}
-          laneOffset={laneOffset}
+          delay={index * spacing}
           scale={scale}
           phase={index * 0.42}
           leader={index === 0}
+          cycleDuration={cycleDuration}
         />
       ))}
     </group>
   );
 }
 
-function PathWalker({
-  curve,
+function SegmentWalker({
+  segments,
   color,
-  offset,
-  speed,
-  laneOffset,
+  delay,
   scale,
   phase,
+  cycleDuration,
   leader = false,
 }: {
-  curve: THREE.CatmullRomCurve3;
+  segments: Array<{
+    curve: THREE.CatmullRomCurve3;
+    leaderDuration: number;
+    segmentDuration: number;
+  }>;
   color: string;
-  offset: number;
-  speed: number;
-  laneOffset: number;
+  delay: number;
   scale: number;
   phase: number;
+  cycleDuration: number;
   leader?: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
   const current = useMemo(() => new THREE.Vector3(), []);
   const next = useMemo(() => new THREE.Vector3(), []);
-  const tangent = useMemo(() => new THREE.Vector3(), []);
-  const side = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((state) => {
     if (!groupRef.current) return;
 
-    const t = (offset + state.clock.elapsedTime * speed) % 1;
-    const lookT = (t + 0.01) % 1;
+    let timeCursor = (state.clock.elapsedTime % cycleDuration + cycleDuration) % cycleDuration;
+    let activeSegment = segments[0];
+
+    for (const segment of segments) {
+      if (timeCursor <= segment.segmentDuration) {
+        activeSegment = segment;
+        break;
+      }
+      timeCursor -= segment.segmentDuration;
+    }
+
+    const soldierTime = THREE.MathUtils.clamp(timeCursor - delay, 0, activeSegment.leaderDuration);
+    const t = activeSegment.leaderDuration <= 0 ? 1 : THREE.MathUtils.clamp(soldierTime / activeSegment.leaderDuration, 0, 1);
+    const lookT = Math.min(1, t + 0.01);
+    const curve = activeSegment.curve;
+
     curve.getPointAt(t, current);
     curve.getPointAt(lookT, next);
-
-    tangent.subVectors(next, current).normalize();
-    side.set(-tangent.z, 0, tangent.x).normalize().multiplyScalar(laneOffset);
-
-    groupRef.current.position.set(current.x + side.x, 0, current.z + side.z);
+    groupRef.current.position.set(current.x, 0, current.z);
     groupRef.current.rotation.y = Math.atan2(next.x - current.x, next.z - current.z + 0.0001);
   });
 
