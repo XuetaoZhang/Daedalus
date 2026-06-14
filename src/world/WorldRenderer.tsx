@@ -89,23 +89,12 @@ export function WorldRenderer({ spec }: WorldRendererProps) {
     () => new Map(layout.landmarkAnchors.map((anchor) => [anchor.landmark.id, anchor.position])),
     [layout.landmarkAnchors],
   );
-  const mainStageAnchor = layout.anchors.find((anchor) => anchor.zone.type === "main_stage");
-  const trackAnchor = layout.anchors.find((anchor) => anchor.zone.type === "track_zone");
+  const autoPatrolLoop = useMemo(() => buildAutoPatrolLoop(layout, spec), [layout, spec]);
 
   return (
     <group>
       <HexTerrain spec={spec} style={spec.style} rim={palette.rim} glow={palette.glow} layout={layout} />
       <RouteNetwork routeNetwork={routeNetwork} />
-      {mainStageAnchor && trackAnchor ? (
-        <TransitSoldier
-          startPosition={[mainStageAnchor.position[0] + 0.72, 0.24, mainStageAnchor.position[2] + 2.4]}
-          endPosition={[trackAnchor.position[0] - 0.58, 0.24, trackAnchor.position[2] + 1.12]}
-          tint="#FF6B3D"
-          tintStrength={0.9}
-          scale={0.96}
-          speed={0.14}
-        />
-      ) : null}
       {spec.zones.map((zone) => (
         <ZonePrefab key={zone.id} zone={zone} style={spec.style} overridePosition={anchorByZoneId.get(zone.id)} />
       ))}
@@ -117,6 +106,7 @@ export function WorldRenderer({ spec }: WorldRendererProps) {
           position={landmarkAnchorById.get(landmark.id) ?? [0, 0, 0]}
         />
       ))}
+      {autoPatrolLoop ? <AutoPatrolSoldier loop={autoPatrolLoop} /> : null}
     </group>
   );
 }
@@ -240,12 +230,15 @@ function AnimatedSoldierModel({
   const { actions } = useAnimations(gltf.animations, rootRef);
 
   useEffect(() => {
-    const requested = actions[clip] ?? actions.walk ?? actions.idle;
+    const preferredNames = [clip, "walk", "rotate", "spin", "idle", "animation", "Action"];
+    const requested = preferredNames.map((name) => actions[name]).find(Boolean) ?? Object.values(actions)[0];
     if (!requested) return;
 
     requested.reset();
     requested.fadeIn(0.2);
     requested.play();
+    requested.enabled = true;
+    requested.clampWhenFinished = false;
     requested.timeScale = clip === "walk" ? 1.15 : 1;
 
     return () => {
@@ -316,59 +309,47 @@ function AnimatedLandmarkModel({
   return <primitive ref={rootRef} object={scene} position={position} rotation={rotation} scale={scale} />;
 }
 
-function TransitSoldier({
-  startPosition,
-  endPosition,
-  tint,
-  tintStrength,
-  scale,
-  speed,
-}: {
-  startPosition: [number, number, number];
-  endPosition: [number, number, number];
-  tint: string;
-  tintStrength: number;
-  scale: number;
-  speed: number;
-}) {
+function AutoPatrolSoldier({ loop }: { loop: AutoPatrolLoop }) {
   const groupRef = useRef<THREE.Group>(null);
-  const start = useMemo(() => new THREE.Vector3(...startPosition), [startPosition]);
-  const end = useMemo(() => new THREE.Vector3(...endPosition), [endPosition]);
   const current = useMemo(() => new THREE.Vector3(), []);
-  const lookAhead = useMemo(() => new THREE.Vector3(), []);
+  const next = useMemo(() => new THREE.Vector3(), []);
+  const segmentIndexRef = useRef(0);
+  const progressRef = useRef(0);
+  const elapsedRef = useRef(0);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     if (!groupRef.current) return;
 
-    const base = (Math.sin(state.clock.elapsedTime * speed * Math.PI * 2) + 1) / 2;
-    const next = (Math.sin((state.clock.elapsedTime + 0.05) * speed * Math.PI * 2) + 1) / 2;
-    const bob = Math.sin(state.clock.elapsedTime * speed * Math.PI * 8) * 0.018;
+    elapsedRef.current += delta;
+    const segment = loop.segments[segmentIndexRef.current];
+    if (!segment) return;
 
-    current.lerpVectors(start, end, base);
-    lookAhead.lerpVectors(start, end, next);
+    progressRef.current += delta / Math.max(segment.duration, 0.001);
 
+    while (progressRef.current >= 1) {
+      progressRef.current -= 1;
+      segmentIndexRef.current = (segmentIndexRef.current + 1) % loop.segments.length;
+    }
+
+    const active = loop.segments[segmentIndexRef.current];
+    const t = THREE.MathUtils.clamp(progressRef.current, 0, 1);
+    const lookT = Math.min(1, t + 0.015);
+
+    active.curve.getPointAt(t, current);
+    active.curve.getPointAt(lookT, next);
+
+    const bob = Math.sin(elapsedRef.current * 8) * 0.012;
     groupRef.current.position.set(current.x, current.y + bob, current.z);
-    groupRef.current.rotation.y = Math.atan2(lookAhead.x - current.x, lookAhead.z - current.z + 0.0001);
+    groupRef.current.rotation.y = Math.atan2(next.x - current.x, next.z - current.z + 0.0001);
   });
 
   return (
     <group ref={groupRef}>
-      <AnimatedSoldierModel
-        position={[0, 0, 0]}
-        scale={scale}
-        tint={tint}
-        tintStrength={tintStrength}
-        clip="walk"
-      />
-      <mesh position={[0, 1.5, 0]} renderOrder={30}>
-        <sphereGeometry args={[0.12, 16, 16]} />
-        <meshBasicMaterial color="#FFD056" transparent opacity={0.95} depthWrite={false} />
+      <AnimatedSoldierModel scale={0.34} tint="#FF8C5A" tintStrength={0.58} clip="walk" />
+      <mesh position={[0, 0.36, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={30}>
+        <ringGeometry args={[0.06, 0.09, 16]} />
+        <meshBasicMaterial color="#FFD056" transparent opacity={0.9} depthWrite={false} />
       </mesh>
-      <mesh position={[0, 0.04, 0]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={29}>
-        <ringGeometry args={[0.42, 0.58, 32]} />
-        <meshBasicMaterial color="#FFD056" transparent opacity={0.85} depthWrite={false} />
-      </mesh>
-      <pointLight position={[0, 0.2, 0]} color="#FFD056" intensity={1.4} distance={3.8} />
     </group>
   );
 }
@@ -1062,6 +1043,87 @@ function buildRouteNetwork(layout: StudioWorldLayout): RouteNetworkShape {
     pathRoutes,
     riverRoute: riverWaypoints,
   };
+}
+
+type AutoPatrolLoop = {
+  segments: Array<{
+    curve: THREE.CatmullRomCurve3;
+    duration: number;
+  }>;
+};
+
+function buildAutoPatrolLoop(layout: StudioWorldLayout, spec: SceneSpec): AutoPatrolLoop | null {
+  const anchors = buildRouteAnchorMap(layout, spec);
+  const mainStage = anchors.get("main-stage");
+  const village = anchors.get("village");
+  const windmill = anchors.get("windmill");
+  const sponsorZone = anchors.get("sponsor-zone") ?? anchors.get("red-castle");
+  const entrance = anchors.get("entrance");
+
+  if (!mainStage || !village || !windmill || !sponsorZone || !entrance) return null;
+
+  const routePairs: Array<[[number, number, number], [number, number, number]]> = [
+    [mainStage, village],
+    [village, windmill],
+    [windmill, sponsorZone],
+    [sponsorZone, entrance],
+    [entrance, mainStage],
+  ];
+
+  return {
+    segments: routePairs.map(([from, to]) => {
+      const curve = new THREE.CatmullRomCurve3(
+        [
+          new THREE.Vector3(from[0], from[1] + 0.2, from[2]),
+          new THREE.Vector3(THREE.MathUtils.lerp(from[0], to[0], 0.35), 0.2, THREE.MathUtils.lerp(from[2], to[2], 0.35)),
+          new THREE.Vector3(THREE.MathUtils.lerp(from[0], to[0], 0.7), 0.2, THREE.MathUtils.lerp(from[2], to[2], 0.7)),
+          new THREE.Vector3(to[0], to[1] + 0.2, to[2]),
+        ],
+        false,
+        "catmullrom",
+        0.08,
+      );
+      return { curve, duration: Math.max(curve.getLength() / 1.35, 2.2) };
+    }),
+  };
+}
+
+function buildRouteAnchorMap(layout: StudioWorldLayout, spec: SceneSpec) {
+  const anchors = new Map<string, [number, number, number]>();
+
+  for (const zoneAnchor of layout.anchors) {
+    const key = zoneAnchor.zone.id.toLowerCase();
+    anchors.set(zoneAnchor.zone.id, zoneAnchor.position);
+    anchors.set(key, zoneAnchor.position);
+    anchors.set(zoneAnchor.zone.type.replace(/_/g, "-"), zoneAnchor.position);
+  }
+
+  for (const landmarkAnchor of layout.landmarkAnchors) {
+    const key = landmarkAnchor.landmark.id.toLowerCase();
+    anchors.set(landmarkAnchor.landmark.id, landmarkAnchor.position);
+    anchors.set(key, landmarkAnchor.position);
+    anchors.set(landmarkAnchor.landmark.type.replace(/_/g, "-"), landmarkAnchor.position);
+  }
+
+  const entrance = layout.anchors.find((anchor) => anchor.zone.type === "entrance");
+  const mainStage = layout.anchors.find((anchor) => anchor.zone.type === "main_stage");
+  const sponsorZone = layout.anchors.find((anchor) => anchor.zone.type === "sponsor_zone");
+  const trackZone = layout.anchors.find((anchor) => anchor.zone.type === "track_zone");
+  const villageLandmark = (spec.landmarks ?? []).find((landmark) => landmark.type === "castle_outpost");
+  const windmillLandmark = (spec.landmarks ?? []).find((landmark) => landmark.type === "windmill");
+
+  if (entrance) anchors.set("entrance", entrance.position);
+  if (mainStage) anchors.set("main-stage", mainStage.position);
+  if (sponsorZone) anchors.set("sponsor-zone", sponsorZone.position);
+  if (trackZone) anchors.set("track-zone", trackZone.position);
+  if (villageLandmark) anchors.set("village", anchors.get(villageLandmark.id) ?? mainStage?.position ?? entrance?.position ?? [0, 0, 0]);
+  if (windmillLandmark) anchors.set("windmill", anchors.get(windmillLandmark.id) ?? trackZone?.position ?? mainStage?.position ?? [0, 0, 0]);
+
+  if (!anchors.has("village") && entrance) anchors.set("village", entrance.position);
+  if (!anchors.has("windmill") && trackZone) anchors.set("windmill", trackZone.position);
+  if (mainStage) anchors.set("red-castle", mainStage.position);
+
+  return anchors;
 }
 
 function buildRouteSegments(points: Array<[number, number, number]>) {
