@@ -77,6 +77,7 @@ const zoneRadiusByType: Record<ZoneSpec["type"], number> = {
 const MODEL_HEX_HEIGHT = 1.154700517654419;
 const MODEL_HEX_SIDE = MODEL_HEX_HEIGHT / 2;
 const BASE_TILE_SCALE = 1.002;
+const DRAGON_ASSET_PATH = "/Dragon.glb";
 
 export function WorldRenderer({ spec }: WorldRendererProps) {
   const palette = paletteByStyle[spec.style];
@@ -108,6 +109,7 @@ export function WorldRenderer({ spec }: WorldRendererProps) {
         />
       ))}
       {autoPatrolLoop ? <AutoPatrolSoldier loop={autoPatrolLoop} /> : null}
+      <SkyDragon layout={layout} />
     </group>
   );
 }
@@ -351,6 +353,104 @@ function AutoPatrolSoldier({ loop }: { loop: AutoPatrolLoop }) {
         <ringGeometry args={[0.06, 0.09, 16]} />
         <meshBasicMaterial color="#FFD056" transparent opacity={0.9} depthWrite={false} />
       </mesh>
+    </group>
+  );
+}
+
+function SkyDragon({ layout }: { layout: StudioWorldLayout }) {
+  const gltf = useGLTF(DRAGON_ASSET_PATH);
+  const flightRef = useRef<THREE.Group>(null);
+  const dragonRef = useRef<THREE.Group>(null);
+  const scene = useMemo(() => cloneSkinned(gltf.scene) as THREE.Group, [gltf.scene]);
+  const { actions } = useAnimations(gltf.animations, dragonRef);
+
+  const flightConfig = useMemo(() => {
+    const halfSpan = Math.max(layout.supportRadius * 0.42, 4.6);
+    return {
+      leftX: -halfSpan,
+      rightX: halfSpan,
+      z: -Math.max(layout.supportRadius * 0.54, 5.1),
+      baseY: Math.max(1.25, Math.min(1.9, layout.supportRadius * 0.06 + 1.02)),
+      cycleDuration: 10.5,
+    };
+  }, [layout.supportRadius]);
+
+  useEffect(() => {
+    scene.traverse((object) => {
+      const mesh = object as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = false;
+    });
+  }, [scene]);
+
+  useEffect(() => {
+    const allNames = Object.keys(actions);
+    const preferredNames = [
+      "Dragon_Flying",
+      "dragon_flying",
+      "Flying",
+      "flying",
+      "Fly",
+      "fly",
+      "flap",
+      "idle",
+      "animation",
+      "Action",
+    ];
+    const directMatch = preferredNames.map((name) => actions[name]).find(Boolean);
+    const fuzzyMatch = Object.entries(actions).find(([name]) =>
+      preferredNames.some((preferred) => name.toLowerCase().includes(preferred.toLowerCase())),
+    )?.[1];
+    const clip = directMatch ?? fuzzyMatch ?? Object.values(actions)[0];
+    if (!clip) return;
+
+    if (allNames.length > 0) {
+      console.info("Dragon animation selected:", clip.getClip().name, "available:", allNames.join(", "));
+    }
+
+    clip.reset();
+    clip.fadeIn(0.2);
+    clip.play();
+    clip.enabled = true;
+    clip.clampWhenFinished = false;
+    clip.timeScale = 1;
+
+    return () => {
+      clip.fadeOut(0.2);
+      clip.stop();
+    };
+  }, [actions]);
+
+  useFrame((state) => {
+    if (!flightRef.current) return;
+
+    const phase = (state.clock.elapsedTime % flightConfig.cycleDuration) / flightConfig.cycleDuration;
+    const pingPong = phase < 0.5 ? phase / 0.5 : 1 - (phase - 0.5) / 0.5;
+    const x = THREE.MathUtils.lerp(flightConfig.leftX, flightConfig.rightX, pingPong);
+    const movingRight = phase < 0.5;
+    const t = state.clock.elapsedTime;
+    const bob = Math.sin(t * 1.35) * 0.035 + Math.sin(t * 0.58 + 0.9) * 0.02;
+
+    flightRef.current.position.set(x, flightConfig.baseY + bob, flightConfig.z);
+    flightRef.current.rotation.set(
+      -0.03 + Math.cos(t * 1.25) * 0.016,
+      movingRight ? Math.PI / 2 : -Math.PI / 2,
+      0,
+    );
+
+    if (dragonRef.current) {
+      dragonRef.current.rotation.set(
+        0,
+        0,
+        Math.sin(t * 0.95) * 0.035,
+      );
+    }
+  });
+
+  return (
+    <group ref={flightRef}>
+      <primitive ref={dragonRef} object={scene} scale={0.28} rotation={[0, 0, 0]} />
     </group>
   );
 }
@@ -1319,5 +1419,6 @@ function edgeCellsFromSet(edgeSet: Set<string>) {
   `${arenaAssetPath}column.glb`,
   `${arenaAssetPath}statue.glb`,
   `${arenaAssetPath}character-soldier.glb`,
+  DRAGON_ASSET_PATH,
   ...controllableLandmarkList.map((asset) => `${hexAssetPath}${asset.type}.glb`),
 ].forEach((assetUrl) => useGLTF.preload(assetUrl));
