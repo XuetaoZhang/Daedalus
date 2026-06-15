@@ -1,5 +1,6 @@
 import type { LandmarkIntent, PlannerOutput, StudioGenerationRequest, WorldTypeMap } from "./types";
 import type { LandmarkSpec, SceneSpec, Web3ProofSpec, ZoneSpec } from "../world/sceneSpec";
+import { controllableLandmarkList } from "../world/controllableAssets";
 
 const DISPLAY_PROVIDER_DEMO = "GLM Demo Planner";
 const DISPLAY_MODEL_DEMO = "glm-5.1";
@@ -28,6 +29,11 @@ const paletteByStyle = {
   },
 } as const;
 
+const titleByLandmarkType = Object.fromEntries(controllableLandmarkList.map((asset) => [asset.type, asset.title])) as Record<
+  LandmarkIntent["type"],
+  string
+>;
+
 function titleCase(input: string) {
   return input
     .split(/[\s_-]+/)
@@ -47,32 +53,12 @@ type LandmarkKeywordSpec = {
   fallbackRegion: LandmarkIntent["region"];
 };
 
-const landmarkKeywordSpecs: LandmarkKeywordSpec[] = [
-  {
-    type: "watermill",
-    title: "Watermill",
-    keywords: ["watermill", "water mill", "水车"],
-    fallbackRegion: "west",
-  },
-  {
-    type: "windmill",
-    title: "Windmill",
-    keywords: ["windmill", "wind mill", "风车", "mill"],
-    fallbackRegion: "north",
-  },
-  {
-    type: "wizard_tower",
-    title: "Wizard Tower",
-    keywords: ["wizard tower", "magic tower", "mage tower", "wizard", "魔法塔"],
-    fallbackRegion: "south",
-  },
-  {
-    type: "castle_outpost",
-    title: "Castle Outpost",
-    keywords: ["small castle", "castle outpost", "outpost", "城堡", "小城堡", "castle"],
-    fallbackRegion: "east",
-  },
-];
+const landmarkKeywordSpecs: LandmarkKeywordSpec[] = controllableLandmarkList.map((asset) => ({
+  type: asset.type,
+  title: asset.title,
+  keywords: asset.aliases,
+  fallbackRegion: asset.defaultRegion,
+}));
 
 const directionalHints: Array<{ phrases: string[]; region: LandmarkIntent["region"]; priority: number }> = [
   { phrases: ["左上角", "左上", "top left", "upper left"], region: "northwest", priority: 5 },
@@ -148,19 +134,22 @@ function inferRegionNearKeyword(prompt: string, keywordIndex: number, keywordLen
 
 function inferLandmarks(prompt: string): LandmarkIntent[] {
   const intents: LandmarkIntent[] = [];
+  const usedTypes = new Set<LandmarkIntent["type"]>();
 
   for (const spec of landmarkKeywordSpecs) {
     const { index, length } = findKeywordIndex(prompt, spec.keywords);
     if (index === -1) continue;
+    if (usedTypes.has(spec.type)) continue;
 
     intents.push({
       type: spec.type,
       title: spec.title,
       region: inferRegionNearKeyword(prompt, index, length, spec.fallbackRegion),
     });
+    usedTypes.add(spec.type);
   }
 
-  return intents.slice(0, 4);
+  return intents.slice(0, 6);
 }
 
 export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOutput {
@@ -207,7 +196,7 @@ export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOut
   const landmarks: LandmarkSpec[] = inferLandmarks(prompt).map((intent, index) => ({
     id: `${intent.type}-${index + 1}`,
     type: intent.type,
-    title: intent.title,
+    title: titleByLandmarkType[intent.type] ?? intent.title,
     region: intent.region,
   }));
 

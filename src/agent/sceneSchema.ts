@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SceneSpec } from "../world/sceneSpec";
+import { controllableLandmarkAliasMap, controllableLandmarkRegistry, controllableLandmarkTypes } from "../world/controllableAssets";
 
 const hexColor = /^#([0-9a-fA-F]{6})$/;
 
@@ -22,7 +23,7 @@ const sceneConstraintSchema = z.enum([
   "sponsor_zone",
 ]);
 
-const landmarkTypeSchema = z.enum(["castle_outpost", "windmill", "watermill", "wizard_tower"]);
+const landmarkTypeSchema = z.enum(controllableLandmarkTypes);
 const landmarkRegionSchema = z.enum([
   "north",
   "south",
@@ -152,21 +153,7 @@ const constraintAliases: Record<string, z.infer<typeof sceneConstraintSchema>> =
   sponsor: "sponsor_zone",
 };
 
-const landmarkTypeAliases: Record<string, z.infer<typeof landmarkTypeSchema>> = {
-  castle_outpost: "castle_outpost",
-  castle: "castle_outpost",
-  outpost: "castle_outpost",
-  windmill: "windmill",
-  mill: "windmill",
-  building_mill: "windmill",
-  watermill: "watermill",
-  water_mill: "watermill",
-  building_watermill: "watermill",
-  wizard_tower: "wizard_tower",
-  wizardtower: "wizard_tower",
-  magic_tower: "wizard_tower",
-  mage_tower: "wizard_tower",
-};
+const landmarkTypeAliases: Record<string, z.infer<typeof landmarkTypeSchema>> = controllableLandmarkAliasMap;
 
 const landmarkRegionAliases: Record<string, z.infer<typeof landmarkRegionSchema>> = {
   north: "north",
@@ -385,18 +372,13 @@ function normalizeProof(input: unknown, fallbackType?: z.infer<typeof proofSchem
 
 function normalizeLandmark(input: unknown, index: number) {
   const record = asRecord(input);
-  const type = parseAlias(record.type ?? record.kind ?? record.assetType, landmarkTypeAliases, "castle_outpost");
+  const type = parseAlias(record.type ?? record.kind ?? record.assetType, landmarkTypeAliases, "building-castle");
+  const asset = controllableLandmarkRegistry[type];
   const title =
     typeof record.title === "string"
       ? record.title.trim()
-      : type === "windmill"
-        ? "Windmill"
-        : type === "watermill"
-          ? "Watermill"
-          : type === "wizard_tower"
-            ? "Wizard Tower"
-            : "Castle Outpost";
-  const region = parseAlias(record.region ?? record.area ?? record.anchor, landmarkRegionAliases, "outer_ring");
+      : asset.title;
+  const region = parseAlias(record.region ?? record.area ?? record.anchor, landmarkRegionAliases, asset.defaultRegion);
 
   return {
     id:

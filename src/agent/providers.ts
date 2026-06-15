@@ -9,6 +9,7 @@ import { parseSceneSpec } from "./sceneSchema";
 import { runtimeConfig, shouldUseServerProxy } from "./runtimeConfig";
 import { buildMockSceneSpec } from "./mockPlanner";
 import type { SceneSpec } from "../world/sceneSpec";
+import { controllableLandmarkTypes } from "../world/controllableAssets";
 
 const DISPLAY_PROVIDER_LIVE = "GLM";
 const DISPLAY_MODEL_LIVE = "glm-5.1";
@@ -28,6 +29,8 @@ const sceneTypeToWorldType = {
   dao_hall: "dao_hall",
   nft_gallery: "nft_gallery",
 } as const;
+
+const allowedLandmarkTypesText = controllableLandmarkTypes.join(", ");
 
 function extractJsonObject(text: string) {
   const fenced = text.match(/```json\s*([\s\S]*?)```/i);
@@ -69,11 +72,11 @@ function buildPlannerPrompt(request: StudioGenerationRequest) {
     "    }",
     "  ],",
     '  "web3Proofs": [{ "type": "nft_wall", "title": "string", "source": "manual" }]',
-    '  "landmarks": [{ "id": "string", "type": "castle_outpost", "title": "string", "region": "east" }]',
+    `  "landmarks": [{ "id": "string", "type": "${controllableLandmarkTypes[0]}", "title": "string", "region": "east" }]`,
     "}",
     "Use 4 to 8 zones.",
     "Allowed zone types: entrance, main_stage, track_zone, project_booth, sponsor_zone, timeline, nft_wall, wallet_badge.",
-    "Allowed landmark types: castle_outpost, windmill, watermill, wizard_tower.",
+    `Allowed landmark types: ${allowedLandmarkTypesText}.`,
     "Allowed landmark regions: north, south, east, west, northwest, northeast, southwest, southeast, center_ring, outer_ring.",
     "Every zone must include exactly these keys: id, type, title, subtitle, position, color, accent, interactions.",
     "Every landmark must include exactly these keys: id, type, title, region.",

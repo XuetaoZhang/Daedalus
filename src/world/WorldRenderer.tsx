@@ -5,6 +5,7 @@ import * as THREE from "three";
 import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js";
 import type { LandmarkSpec, SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
 import { buildStudioWorldLayout, type StudioWorldLayout } from "./studioWorldLayout";
+import { controllableLandmarkList, controllableLandmarkRegistry, getControllableLandmarkAsset } from "./controllableAssets";
 
 type WorldRendererProps = {
   spec: SceneSpec;
@@ -409,59 +410,23 @@ function LandmarkPrefab({
 }) {
   const tintStrength = style === "game" ? 0.1 : style === "animation" ? 0.22 : 0.34;
   const tint = style === "animation" ? "#8AD6FF" : style === "voxel" ? "#8BC779" : "#5E6B84";
+  const asset = getControllableLandmarkAsset(landmark.type);
+  if (!asset) return null;
 
-  switch (landmark.type) {
-    case "castle_outpost":
-      return (
-        <group position={position}>
-          <PrefabModel
-            url={`${hexAssetPath}building-castle.glb`}
-            position={[0, 0.2, 0]}
-            scale={0.72}
-            tint={tint}
-            tintStrength={tintStrength}
-          />
-        </group>
-      );
-    case "windmill":
-      return (
-        <group position={position}>
-          <AnimatedLandmarkModel
-            url={`${hexAssetPath}building-mill.glb`}
-            position={[0, 0.18, 0]}
-            scale={0.74}
-            tint={tint}
-            tintStrength={tintStrength}
-          />
-        </group>
-      );
-    case "watermill":
-      return (
-        <group position={position}>
-          <AnimatedLandmarkModel
-            url={`${hexAssetPath}building-watermill.glb`}
-            position={[0, 0.18, 0]}
-            scale={0.78}
-            tint={tint}
-            tintStrength={tintStrength}
-          />
-        </group>
-      );
-    case "wizard_tower":
-      return (
-        <group position={position}>
-          <PrefabModel
-            url={`${hexAssetPath}building-wizard-tower.glb`}
-            position={[0, 0.18, 0]}
-            scale={0.76}
-            tint={tint}
-            tintStrength={tintStrength}
-          />
-        </group>
-      );
-    default:
-      return null;
-  }
+  const modelProps = {
+    url: `${hexAssetPath}${asset.type}.glb`,
+    position: [0, asset.y, 0] as [number, number, number],
+    rotation: asset.rotation ?? [0, 0, 0] as [number, number, number],
+    scale: asset.scale,
+    tint,
+    tintStrength,
+  };
+
+  return (
+    <group position={position}>
+      {asset.animated ? <AnimatedLandmarkModel {...modelProps} /> : <PrefabModel {...modelProps} />}
+    </group>
+  );
 }
 
 function ZoneMarker({ radius, color, accent }: { radius: number; color: string; accent: string }) {
@@ -1109,8 +1074,8 @@ function buildRouteAnchorMap(layout: StudioWorldLayout, spec: SceneSpec) {
   const mainStage = layout.anchors.find((anchor) => anchor.zone.type === "main_stage");
   const sponsorZone = layout.anchors.find((anchor) => anchor.zone.type === "sponsor_zone");
   const trackZone = layout.anchors.find((anchor) => anchor.zone.type === "track_zone");
-  const villageLandmark = (spec.landmarks ?? []).find((landmark) => landmark.type === "castle_outpost");
-  const windmillLandmark = (spec.landmarks ?? []).find((landmark) => landmark.type === "windmill");
+  const villageLandmark = (spec.landmarks ?? []).find((landmark) => controllableLandmarkRegistry[landmark.type]?.routeAlias === "village");
+  const windmillLandmark = (spec.landmarks ?? []).find((landmark) => controllableLandmarkRegistry[landmark.type]?.routeAlias === "windmill");
 
   if (entrance) anchors.set("entrance", entrance.position);
   if (mainStage) anchors.set("main-stage", mainStage.position);
@@ -1316,16 +1281,25 @@ function edgeCellsFromSet(edgeSet: Set<string>) {
   `${hexAssetPath}river-intersectionG.glb`,
   `${hexAssetPath}river-intersectionH.glb`,
   `${hexAssetPath}building-castle.glb`,
+  `${hexAssetPath}bridge.glb`,
+  `${hexAssetPath}building-archery.glb`,
+  `${hexAssetPath}building-cabin.glb`,
+  `${hexAssetPath}building-dock.glb`,
+  `${hexAssetPath}building-farm.glb`,
+  `${hexAssetPath}building-house.glb`,
+  `${hexAssetPath}building-market.glb`,
   `${hexAssetPath}building-mill.glb`,
+  `${hexAssetPath}building-mine.glb`,
+  `${hexAssetPath}building-port.glb`,
+  `${hexAssetPath}building-sheep.glb`,
+  `${hexAssetPath}building-smelter.glb`,
+  `${hexAssetPath}building-tower.glb`,
+  `${hexAssetPath}building-village.glb`,
+  `${hexAssetPath}building-wall.glb`,
+  `${hexAssetPath}building-walls.glb`,
   `${hexAssetPath}building-watermill.glb`,
   `${hexAssetPath}building-wizard-tower.glb`,
-  `${hexAssetPath}building-walls.glb`,
   `${hexAssetPath}unit-wall-tower.glb`,
-  `${hexAssetPath}building-archery.glb`,
-  `${hexAssetPath}building-market.glb`,
-  `${hexAssetPath}building-cabin.glb`,
-  `${hexAssetPath}building-village.glb`,
-  `${hexAssetPath}building-tower.glb`,
   `${hexAssetPath}path-straight.glb`,
   `${hexAssetPath}path-corner.glb`,
   `${hexAssetPath}path-end.glb`,
@@ -1339,11 +1313,11 @@ function edgeCellsFromSet(edgeSet: Set<string>) {
   `${hexAssetPath}path-intersectionG.glb`,
   `${hexAssetPath}path-intersectionH.glb`,
   `${hexAssetPath}path-square.glb`,
-  `${hexAssetPath}bridge.glb`,
   `${arenaAssetPath}wall-gate.glb`,
   `${arenaAssetPath}banner.glb`,
   `${arenaAssetPath}wall.glb`,
   `${arenaAssetPath}column.glb`,
   `${arenaAssetPath}statue.glb`,
   `${arenaAssetPath}character-soldier.glb`,
+  ...controllableLandmarkList.map((asset) => `${hexAssetPath}${asset.type}.glb`),
 ].forEach((assetUrl) => useGLTF.preload(assetUrl));

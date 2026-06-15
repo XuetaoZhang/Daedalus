@@ -1,3 +1,5 @@
+import type { ControllableLandmarkType } from "./controllableAssets";
+
 export type ZoneType =
   | "entrance"
   | "main_stage"
@@ -8,7 +10,7 @@ export type ZoneType =
   | "nft_wall"
   | "wallet_badge";
 
-export type LandmarkType = "castle_outpost" | "windmill" | "watermill" | "wizard_tower";
+export type LandmarkType = ControllableLandmarkType;
 
 export type LandmarkRegion =
   | "north"

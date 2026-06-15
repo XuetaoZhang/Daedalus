@@ -21,7 +21,7 @@ https://daedalus-henna.vercel.app
 - Converts product, event, community, and virtual-space briefs into structured 3D scene specs
 - Renders stylized 3D environments directly in the browser with Three.js
 - Exposes an observable agent workflow with planning, validation, repair, and export states
-- Supports reusable landmark assets such as castles, windmills, watermills, and towers
+- Supports controllable prefab landmarks placed by natural language, such as castles, villages, windmills, docks, towers, and wizard towers
 - Exports scene specs, execution traces, validation reports, and presentation-ready artifacts
 
 ### Product experience
@@ -50,6 +50,44 @@ Current scene capabilities include:
 - Landmark placement by semantic region
 - Hex-tile terrain composition
 - Prefab-based scene rendering
+
+### Controllable Models
+
+These landmark models can be placed with natural-language instructions such as:
+
+- `Add a small castle on the east side`
+- `在东北角增加一个风车`
+- `在南边放一个水车和一个码头`
+
+Supported controllable models:
+
+| Preview | Model | Name | Example keywords |
+| --- | --- | --- | --- |
+| <img src="public/kenney_hexagon-kit/Previews/building-castle.png" width="110" /> | `building-castle` | Small Castle | `small castle`, `castle`, `小城堡`, `城堡` |
+| <img src="public/kenney_hexagon-kit/Previews/building-village.png" width="110" /> | `building-village` | Village | `village`, `村庄`, `村落` |
+| <img src="public/kenney_hexagon-kit/Previews/building-house.png" width="110" /> | `building-house` | House | `house`, `home`, `民居`, `房子` |
+| <img src="public/kenney_hexagon-kit/Previews/building-cabin.png" width="110" /> | `building-cabin` | Cabin | `cabin`, `hut`, `木屋`, `小木屋` |
+| <img src="public/kenney_hexagon-kit/Previews/building-market.png" width="110" /> | `building-market` | Market | `market`, `bazaar`, `集市`, `市场` |
+| <img src="public/kenney_hexagon-kit/Previews/building-archery.png" width="110" /> | `building-archery` | Archery Range | `archery`, `archery range`, `箭术营地`, `射箭场` |
+| <img src="public/kenney_hexagon-kit/Previews/building-farm.png" width="110" /> | `building-farm` | Farm | `farm`, `farmland`, `农场`, `田地` |
+| <img src="public/kenney_hexagon-kit/Previews/building-sheep.png" width="110" /> | `building-sheep` | Sheep Farm | `sheep farm`, `牧场`, `羊圈` |
+| <img src="public/kenney_hexagon-kit/Previews/building-mine.png" width="110" /> | `building-mine` | Mine | `mine`, `quarry`, `矿场`, `矿井` |
+| <img src="public/kenney_hexagon-kit/Previews/building-smelter.png" width="110" /> | `building-smelter` | Smelter | `smelter`, `forge`, `冶炼厂`, `熔炉` |
+| <img src="public/kenney_hexagon-kit/Previews/building-tower.png" width="110" /> | `building-tower` | Watch Tower | `tower`, `watch tower`, `哨塔`, `塔楼` |
+| <img src="public/kenney_hexagon-kit/Previews/building-wall.png" width="110" /> | `building-wall` | Wall Segment | `wall segment`, `城墙段`, `单段城墙` |
+| <img src="public/kenney_hexagon-kit/Previews/building-walls.png" width="110" /> | `building-walls` | Fortified Walls | `walls`, `fortified walls`, `城墙群`, `防御城墙` |
+| <img src="public/kenney_hexagon-kit/Previews/building-dock.png" width="110" /> | `building-dock` | Dock | `dock`, `pier`, `码头`, `栈桥` |
+| <img src="public/kenney_hexagon-kit/Previews/building-port.png" width="110" /> | `building-port` | Port | `port`, `harbor`, `港口`, `海港` |
+| <img src="public/kenney_hexagon-kit/Previews/bridge.png" width="110" /> | `bridge` | Bridge | `bridge`, `wooden bridge`, `桥`, `桥梁` |
+| <img src="public/kenney_hexagon-kit/Previews/building-mill.png" width="110" /> | `building-mill` | Windmill (Animated) | `windmill`, `风车` |
+| <img src="public/kenney_hexagon-kit/Previews/building-watermill.png" width="110" /> | `building-watermill` | Watermill (Animated) | `watermill`, `水车` |
+| <img src="public/kenney_hexagon-kit/Previews/building-wizard-tower.png" width="110" /> | `building-wizard-tower` | Wizard Tower | `wizard tower`, `magic tower`, `魔法塔` |
+
+Notes:
+
+- Natural-language placement already supports directions such as `east`, `west`, `north`, `south`, `northeast`, `left top`, `东侧`, `南边`, `左上角`
+- Animated assets currently include `building-mill` and `building-watermill`
+- The current parser is optimized for landmark placement; terrain editing phrases like `南边增加一片水域` are a separate next step
 
 ### Tech stack
 
@@ -133,7 +171,7 @@ https://daedalus-henna.vercel.app
 - 将产品空间、活动空间、社区空间、虚拟展示空间需求转换为结构化 3D 场景规范
 - 基于 Three.js 在浏览器中直接渲染风格化 3D 世界
 - 展示可观察的 Agent 工作流，包括规划、验证、修复和导出
-- 支持复用地标资产，例如城堡、风车、水车、魔法塔
+- 支持通过自然语言放置可控 prefab 资产，例如城堡、村庄、码头、风车、水车、哨塔、魔法塔
 - 导出 scene spec、执行轨迹、验证报告和演示材料
 
 ### 产品体验
@@ -162,6 +200,44 @@ Daedalus 采用受控 scene schema，而不是让模型直接生成任意前端�
 - 基于语义区域的地标放置
 - 六边形地块地形拼装
 - 基于 prefab 的场景渲染
+
+### 可控模型
+
+下面这些 landmark 模型已经支持通过自然语言进行有效放置，例如：
+
+- `在东侧增加一个小城堡`
+- `在东北角增加一个风车`
+- `在南边放一个水车和一个码头`
+
+当前支持的可控模型如下：
+
+| 预览 | 模型名 | 中文名 | 可生效关键词示例 |
+| --- | --- | --- | --- |
+| <img src="public/kenney_hexagon-kit/Previews/building-castle.png" width="110" /> | `building-castle` | 小城堡 | `小城堡`、`城堡`、`castle` |
+| <img src="public/kenney_hexagon-kit/Previews/building-village.png" width="110" /> | `building-village` | 村庄 | `村庄`、`村落`、`village` |
+| <img src="public/kenney_hexagon-kit/Previews/building-house.png" width="110" /> | `building-house` | 民居 | `民居`、`房子`、`house` |
+| <img src="public/kenney_hexagon-kit/Previews/building-cabin.png" width="110" /> | `building-cabin` | 木屋 | `木屋`、`小木屋`、`cabin` |
+| <img src="public/kenney_hexagon-kit/Previews/building-market.png" width="110" /> | `building-market` | 集市 | `集市`、`市场`、`market` |
+| <img src="public/kenney_hexagon-kit/Previews/building-archery.png" width="110" /> | `building-archery` | 箭术营地 | `箭术营地`、`射箭场`、`archery` |
+| <img src="public/kenney_hexagon-kit/Previews/building-farm.png" width="110" /> | `building-farm` | 农场 | `农场`、`田地`、`farm` |
+| <img src="public/kenney_hexagon-kit/Previews/building-sheep.png" width="110" /> | `building-sheep` | 牧场 | `牧场`、`羊圈`、`sheep farm` |
+| <img src="public/kenney_hexagon-kit/Previews/building-mine.png" width="110" /> | `building-mine` | 矿场 | `矿场`、`矿井`、`mine` |
+| <img src="public/kenney_hexagon-kit/Previews/building-smelter.png" width="110" /> | `building-smelter` | 冶炼厂 | `冶炼厂`、`熔炉`、`smelter` |
+| <img src="public/kenney_hexagon-kit/Previews/building-tower.png" width="110" /> | `building-tower` | 哨塔 | `哨塔`、`塔楼`、`tower` |
+| <img src="public/kenney_hexagon-kit/Previews/building-wall.png" width="110" /> | `building-wall` | 城墙段 | `城墙段`、`单段城墙`、`wall segment` |
+| <img src="public/kenney_hexagon-kit/Previews/building-walls.png" width="110" /> | `building-walls` | 城墙群 | `城墙群`、`防御城墙`、`walls` |
+| <img src="public/kenney_hexagon-kit/Previews/building-dock.png" width="110" /> | `building-dock` | 码头 | `码头`、`栈桥`、`dock` |
+| <img src="public/kenney_hexagon-kit/Previews/building-port.png" width="110" /> | `building-port` | 港口 | `港口`、`海港`、`port` |
+| <img src="public/kenney_hexagon-kit/Previews/bridge.png" width="110" /> | `bridge` | 桥梁 | `桥`、`桥梁`、`bridge` |
+| <img src="public/kenney_hexagon-kit/Previews/building-mill.png" width="110" /> | `building-mill` | 风车（带动画） | `风车`、`windmill` |
+| <img src="public/kenney_hexagon-kit/Previews/building-watermill.png" width="110" /> | `building-watermill` | 水车（带动画） | `水车`、`watermill` |
+| <img src="public/kenney_hexagon-kit/Previews/building-wizard-tower.png" width="110" /> | `building-wizard-tower` | 魔法塔 | `魔法塔`、`magic tower`、`wizard tower` |
+
+说明：
+
+- 当前已经支持区域语义，如 `东侧`、`西侧`、`北侧`、`南边`、`东北角`、`左上角`
+- 当前带动画的资产是 `building-mill` 和 `building-watermill`
+- 目前这一版优先支持“建筑/地标放置”；像 `南边增加一片水域` 这种地形编辑，还需要单独补一层 terrain 解析与生成逻辑
 
 ### 技术栈
 
