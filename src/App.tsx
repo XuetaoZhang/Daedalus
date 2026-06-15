@@ -727,13 +727,13 @@ function SceneCanvas({
         orthographic
         camera={{ position: cameraSettings.position, zoom: cameraSettings.zoom, near: 0.1, far: 80 }}
         onCreated={({ camera }) => camera.lookAt(...cameraTarget)}
-        shadows={mode === "studio"}
+        shadows={false}
       >
         <color attach="background" args={[backgroundColor || studioPalette?.background || "#efe4ca"]} />
         <fog attach="fog" args={[fogColor || studioPalette?.fog || "#efe4ca", 12, 24]} />
         <ambientLight intensity={mode === "studio" ? 1.1 : 1.45} />
         <directionalLight
-          castShadow={mode === "studio"}
+          castShadow={false}
           position={mode === "studio" ? [-4, 7, 3] : [-5, 8, 5]}
           intensity={mode === "studio" ? 1.7 : 2.15}
           shadow-mapSize-width={2048}
