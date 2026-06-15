@@ -46,7 +46,7 @@ export default async function handler(
     },
     body: JSON.stringify({
       ...(req.body ?? {}),
-      model: (req.body as { model?: string } | undefined)?.model || DEFAULT_MODEL,
+      model: DEFAULT_MODEL,
       metadata: {
         source: "daedalus-api-proxy",
         action: suffix,

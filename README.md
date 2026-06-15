@@ -127,6 +127,8 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 
 The current architecture keeps the provider layer isolated, so it can be adapted to other OpenAI-compatible or GLM-compatible endpoints.
 
+When deployed behind the server proxy, the frontend does not need to send a concrete `model` name. The backend injects the active model from server environment variables, which keeps provider selection decoupled from the UI.
+
 ### Project structure
 
 ```text
@@ -276,6 +278,8 @@ VITE_DEEPSEEK_MODEL=deepseek-chat
 ```
 
 当前架构已经将 provider 层隔离，因此后续可以切换到其他 OpenAI 兼容接口，或接入 GLM 兼容接口。
+
+当使用服务端代理部署时，前端不需要传具体的 `model` 名称；后端会从服务端环境变量中注入当前使用的模型，这样前端界面和底层模型选择就是解耦的。
 
 ### 项目结构
 

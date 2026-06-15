@@ -156,10 +156,14 @@ async function requestDeepSeek(action: "generate" | "repair" | "completion", bod
     headers.Authorization = `Bearer ${runtimeConfig.deepseekApiKey}`;
   }
 
+  const requestBody = useProxy
+    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "model"))
+    : body;
+
   return fetch(endpoint, {
     method: "POST",
     headers,
-    body: JSON.stringify(body),
+    body: JSON.stringify(requestBody),
   });
 }
 
