@@ -54,7 +54,10 @@ export function terrainSeedFromPrompt(prompt: string, fallback = 1701) {
 
 export function buildTerrainTiles(spec: SceneSpec, style: WorldStyle, layout: StudioWorldLayout): TerrainTile[] {
   const plan = buildTerrainPlan(spec, style, layout);
-  return plan.cells.map((cell) => terrainCellToTile(cell, style));
+  const landmarkCellKeys = new Set(layout.landmarkAnchors.map((anchor) => hexKey(anchor.cell.q, anchor.cell.r)));
+  return plan.cells
+    .filter((cell) => !landmarkCellKeys.has(cell.key))
+    .map((cell) => terrainCellToTile(cell, style));
 }
 
 export function buildTerrainPlan(spec: SceneSpec, style: WorldStyle, layout: StudioWorldLayout): TerrainPlan {

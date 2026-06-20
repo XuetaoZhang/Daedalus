@@ -6,7 +6,7 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 import type { LandmarkSpec, SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
 import { buildStudioWorldLayout, type StudioWorldLayout } from "./studioWorldLayout";
 import { controllableLandmarkList, controllableLandmarkRegistry, getControllableLandmarkAsset } from "./controllableAssets";
-import { MODEL_HEX_SIDE, axialToWorld, buildTerrainTiles } from "./terrain/terrainGenerator";
+import { BASE_TILE_SCALE, MODEL_HEX_SIDE, axialToWorld, buildTerrainTiles } from "./terrain/terrainGenerator";
 
 type WorldRendererProps = {
   spec: SceneSpec;
@@ -488,62 +488,29 @@ function LandmarkPrefab({
   const tint = style === "animation" ? "#8AD6FF" : style === "voxel" ? "#8BC779" : "#5E6B84";
   const asset = getControllableLandmarkAsset(landmark.type);
   if (!asset) return null;
-  const displayPosition = adjustedLandmarkPosition(landmark, position);
 
   const modelProps = {
     url: `${hexAssetPath}${asset.type}.glb`,
-    position: [0, asset.y, 0] as [number, number, number],
-    rotation: asset.rotation ?? [0, 0, 0] as [number, number, number],
-    scale: asset.scale,
+    position: [0, 0, 0] as [number, number, number],
+    rotation: embeddedHexLandmarkRotation(landmark),
+    scale: BASE_TILE_SCALE,
     tint,
     tintStrength,
   };
 
   return (
-    <group position={displayPosition}>
+    <group position={position}>
       {asset.animated ? <AnimatedLandmarkModel {...modelProps} /> : <PrefabModel {...modelProps} />}
     </group>
   );
 }
 
-function adjustedLandmarkPosition(landmark: LandmarkSpec, position: [number, number, number]): [number, number, number] {
-  if (
-    landmark.type !== "building-dock" &&
-    landmark.type !== "building-port" &&
-    landmark.type !== "building-watermill"
-  ) {
-    return position;
+function embeddedHexLandmarkRotation(landmark: LandmarkSpec): [number, number, number] {
+  if (landmark.type === "bridge" || landmark.type.startsWith("building-")) {
+    return [0, 0, 0];
   }
 
-  const [directionX, directionZ] = waterfrontDirectionVector(landmark.region);
-  const offset = landmark.type === "building-watermill" ? 0.18 : 0.28;
-  return [position[0] + directionX * offset, position[1], position[2] + directionZ * offset];
-}
-
-function waterfrontDirectionVector(region: LandmarkSpec["region"]): [number, number] {
-  switch (region) {
-    case "north":
-      return [0, -1];
-    case "south":
-      return [0, 1];
-    case "east":
-      return [1, 0];
-    case "west":
-      return [-1, 0];
-    case "northeast":
-      return [0.7, -0.7];
-    case "northwest":
-      return [-0.7, -0.7];
-    case "southeast":
-      return [0.7, 0.7];
-    case "southwest":
-      return [-0.7, 0.7];
-    case "outer_ring":
-      return [0, 1];
-    case "center_ring":
-    default:
-      return [0, 1];
-  }
+  return [0, 0, 0];
 }
 
 function ZoneMarker({ radius, color, accent }: { radius: number; color: string; accent: string }) {
@@ -603,18 +570,23 @@ function PrefabCluster({
       return (
         <group>
           <PrefabModel
-            url={`${hexAssetPath}building-castle.glb`}
-            position={[0, 0.22, 0]}
-            rotation={[0, Math.PI / 6, 0]}
-            scale={1.06}
+            url={`${hexAssetPath}unit-mansion.glb`}
+            position={[0, 0.2, 0]}
+            scale={2.15}
             tint={tint}
             tintStrength={tintStrength}
           />
           <PrefabModel
-            url={`${hexAssetPath}building-walls.glb`}
-            position={[0, 0.19, -1.18]}
-            rotation={[0, Math.PI / 6, 0]}
-            scale={0.64}
+            url={`${hexAssetPath}unit-wall-tower.glb`}
+            position={[-0.58, 0.18, -0.76]}
+            scale={0.88}
+            tint={tint}
+            tintStrength={tintStrength * 0.9}
+          />
+          <PrefabModel
+            url={`${hexAssetPath}unit-wall-tower.glb`}
+            position={[0.58, 0.18, -0.76]}
+            scale={0.88}
             tint={tint}
             tintStrength={tintStrength * 0.9}
           />
@@ -640,10 +612,9 @@ function PrefabCluster({
       return (
         <group>
           <PrefabModel
-            url={`${hexAssetPath}building-archery.glb`}
-            position={[0, 0.18, 0]}
-            rotation={[0, -0.28, 0]}
-            scale={0.84}
+            url={`${arenaAssetPath}weapon-rack.glb`}
+            position={[0, 0.2, -0.04]}
+            scale={0.92}
             tint={tint}
             tintStrength={tintStrength}
           />
@@ -662,18 +633,18 @@ function PrefabCluster({
       return (
         <group>
           <PrefabModel
-            url={`${hexAssetPath}building-market.glb`}
-            position={[-0.42, 0.18, 0.12]}
-            rotation={[0, -0.34, 0]}
-            scale={0.74}
+            url={`${hexAssetPath}unit-house.glb`}
+            position={[-0.46, 0.2, 0.1]}
+            rotation={[0, -0.28, 0]}
+            scale={1.05}
             tint={tint}
             tintStrength={tintStrength}
           />
           <PrefabModel
-            url={`${hexAssetPath}building-cabin.glb`}
-            position={[0.58, 0.18, 0.18]}
+            url={`${hexAssetPath}unit-house.glb`}
+            position={[0.5, 0.2, 0.18]}
             rotation={[0, 0.38, 0]}
-            scale={0.64}
+            scale={0.96}
             tint={accent}
             tintStrength={tintStrength * 0.88}
           />
@@ -692,18 +663,18 @@ function PrefabCluster({
       return (
         <group>
           <PrefabModel
-            url={`${hexAssetPath}building-village.glb`}
-            position={[-0.1, 0.18, 0.1]}
+            url={`${hexAssetPath}unit-house.glb`}
+            position={[-0.34, 0.2, 0.04]}
             rotation={[0, -0.2, 0]}
-            scale={0.72}
+            scale={1.08}
             tint={tint}
             tintStrength={tintStrength}
           />
           <PrefabModel
-            url={`${hexAssetPath}building-tower.glb`}
-            position={[0.86, 0.18, 0.64]}
+            url={`${hexAssetPath}unit-tower.glb`}
+            position={[0.62, 0.2, 0.42]}
             rotation={[0, 0.24, 0]}
-            scale={0.62}
+            scale={0.9}
             tint={accent}
             tintStrength={tintStrength * 0.92}
           />
@@ -714,10 +685,10 @@ function PrefabCluster({
       return (
         <group>
           <PrefabModel
-            url={`${hexAssetPath}bridge.glb`}
-            position={[0, 0.18, 0]}
+            url={`${arenaAssetPath}stairs.glb`}
+            position={[0, 0.2, 0]}
             rotation={[0, Math.PI / 2, 0]}
-            scale={0.86}
+            scale={0.82}
             tint={tint}
             tintStrength={tintStrength * 0.75}
           />
