@@ -90,6 +90,50 @@ Notes:
 - Animated assets currently include `building-mill` and `building-watermill`
 - Terrain profiles change the overall map character, and regional terrain directives now support phrases such as `south water`, `west forest`, and `northeast mountains`
 - Landmark-aware terrain patches keep water-facing, mountain-facing, and settlement assets visually grounded
+- `bridge` and every `building-*` controllable landmark is embedded as a native hex tile, so its own base replaces the terrain tile underneath instead of being stacked on top of it
+
+### Prompt template
+
+You can paste and edit this prompt in Studio:
+
+```text
+Create a 3D world for an AI x Web3 Demo Day.
+
+The world should feel like a playable hex-map scene, clear enough for browser-based exploration and presentation.
+
+Core zones:
+1. A main stage for keynote talks and demos
+2. A project booth area for teams
+3. A sponsor zone
+4. An NFT proof wall
+5. A timeline corridor
+6. A wallet badge area
+
+Terrain layout:
+1. Add a water area on the south side
+2. Make the west side a forest
+3. Make the northeast side mountainous
+4. Keep the center readable and walkable
+
+Landmarks:
+1. Add a small castle on the north side
+2. Add a windmill in the northeast corner
+3. Add a watermill and a dock on the south side near the water
+4. Add a port on the southeast side
+5. Add a bridge near the timeline corridor
+6. Add a village and a market on the west side
+7. Add a mine, a smelter, and a wizard tower in the mountain area
+8. Add a farm, a sheep farm, a house, a cabin, an archery range, a watch tower, wall segments, and fortified walls where they fit naturally
+
+Use a game style, keep the scene visually coherent, and show that the agent is turning natural language into a structured 3D world.
+```
+
+Effective editable parts:
+
+- Terrain phrases such as `south water`, `west forest`, `northeast mountains`, `coastal`, `river`, `plain`, or `mixed`
+- Direction phrases such as `north`, `south`, `east`, `west`, `northeast`, `southwest`, `left top`, or Chinese directions like `南边`, `东北角`
+- Landmark names listed in the controllable model table
+- Style words such as `game`, `animation`, or `voxel`
 
 ### Tech stack
 
@@ -244,12 +288,13 @@ Daedalus 采用受控 scene schema，而不是让模型直接生成任意前端�
 - 当前带动画的资产是 `building-mill` 和 `building-watermill`
 - 当前地形档位会改变整体地图气质，并且区域地形指令已支持 `南边增加一片水域`、`西侧森林`、`东北侧山区` 这类表达
 - 地标周边会自动做地形适配，例如水车/码头靠近水域，矿场/魔法塔靠近山石，村庄/农场保持可行走草地
+- `bridge` 和所有 `building-*` 可控地标都会作为原生六边形地图格嵌入，模型自带底盘会替代下方地形格，而不是叠加在地形格上
 
 ### 示例提示词
 
 请生成一个用于 AI x Web3 Demo Day 的 3D 展示世界。
 
-这个世界需要适合黑客松评委浏览和演示，整体要清晰、可读、有未来感，并且带有游戏地图式的空间组织感。
+这个世界需要适合浏览器内浏览和演示，整体要清晰、可读、有未来感，并且带有游戏地图式的空间组织感。
 
 请包含以下核心区域：
 1. 一个主舞台，用于团队路演和最终展示
@@ -259,14 +304,30 @@ Daedalus 采用受控 scene schema，而不是让模型直接生成任意前端�
 5. 一条时间长廊 timeline corridor，用来展示从构思、开发、验证到提交的过程
 6. 一个钱包身份展示区域 wallet badge
 
+请生成以下地形：
+1. 南边增加一片水域
+2. 西侧生成森林
+3. 东北侧生成山区
+4. 中心区域保持清晰、可走、适合展示
+
 另外请增加以下地标：
 1. 在北侧增加一个小城堡
-2. 在北侧增加一个风车
-3. 在西侧增加一个水车
-4. 在南侧增加一个魔法塔
-
+2. 在东北角增加一个风车
+3. 在南边靠近水域的位置增加一个水车和一个码头
+4. 在东南侧增加一个港口
+5. 在 timeline corridor 附近增加一个桥梁
+6. 在西侧增加一个村庄和一个集市
+7. 在东北侧山区增加一个矿场、一个冶炼厂和一个魔法塔
+8. 在合适的位置增加农场、牧场、民居、木屋、箭术营地、哨塔、城墙段和城墙群
 
 请强调“AI Agent 正在把自然语言需求转成 3D 世界”的感觉，并保证它适合在浏览器中演示。
+
+可修改并且会生效的部分：
+
+- 地形：`南边增加一片水域`、`西侧森林`、`东北侧山区`、`海边`、`河流`、`平原`、`mixed`
+- 方位：`北侧`、`南边`、`东侧`、`西侧`、`东北角`、`西南角`、`左上角`、`右下角`
+- 地标：上方表格里的所有模型名和关键词，例如 `小城堡`、`村庄`、`码头`、`港口`、`桥梁`、`风车`、`水车`、`魔法塔`
+- 风格：`game`、`animation`、`voxel`
 
 ### 技术栈
 
