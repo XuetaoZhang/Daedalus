@@ -49,6 +49,7 @@ Current scene capabilities include:
 - Style presets such as `game`, `animation`, and `voxel`
 - Landmark placement by semantic region
 - Hex-tile terrain composition
+- Seeded terrain profiles: `coastal`, `forest`, `mountain`, `river`, `plain`, and `mixed`
 - Prefab-based scene rendering
 
 ### Controllable Models
@@ -87,7 +88,7 @@ Notes:
 
 - Natural-language placement already supports directions such as `east`, `west`, `north`, `south`, `northeast`, `left top`, `东侧`, `南边`, `左上角`
 - Animated assets currently include `building-mill` and `building-watermill`
-- The current parser is optimized for landmark placement; terrain editing phrases like `南边增加一片水域` are a separate next step
+- Terrain profiles change the overall map character, and regional terrain directives now support phrases such as `south water`, `west forest`, and `northeast mountains`
 
 ### Tech stack
 
@@ -201,6 +202,7 @@ Daedalus 采用受控 scene schema，而不是让模型直接生成任意前端�
 - `game`、`animation`、`voxel` 等风格预设
 - 基于语义区域的地标放置
 - 六边形地块地形拼装
+- 基于 seed 的地形档位：`coastal`、`forest`、`mountain`、`river`、`plain`、`mixed`
 - 基于 prefab 的场景渲染
 
 ### 可控模型
@@ -239,7 +241,7 @@ Daedalus 采用受控 scene schema，而不是让模型直接生成任意前端�
 
 - 当前已经支持区域语义，如 `东侧`、`西侧`、`北侧`、`南边`、`东北角`、`左上角`
 - 当前带动画的资产是 `building-mill` 和 `building-watermill`
-- 目前这一版优先支持“建筑/地标放置”；像 `南边增加一片水域` 这种地形编辑，还需要单独补一层 terrain 解析与生成逻辑
+- 当前地形档位会改变整体地图气质，并且区域地形指令已支持 `南边增加一片水域`、`西侧森林`、`东北侧山区` 这类表达
 
 ### 示例提示词
 

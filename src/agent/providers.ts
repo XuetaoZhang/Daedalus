@@ -58,6 +58,9 @@ function buildPlannerPrompt(request: StudioGenerationRequest) {
     `  "theme": "${request.theme}",`,
     `  "style": "${request.style}",`,
     `  "worldType": "${targetWorldType}",`,
+    `  "terrainSeed": ${request.terrainRunSeed ?? 18342},`,
+    '  "terrainProfile": "mixed",',
+    '  "terrainDirectives": [{ "type": "water", "region": "south", "shape": "blob", "density": "medium", "size": "medium" }],',
     '  "constraints": ["browser_ready", "wallet_badge"],',
     "  \"zones\": [",
     "    {",
@@ -71,13 +74,19 @@ function buildPlannerPrompt(request: StudioGenerationRequest) {
     '      "interactions": ["string"]',
     "    }",
     "  ],",
-    '  "web3Proofs": [{ "type": "nft_wall", "title": "string", "source": "manual" }]',
+    '  "web3Proofs": [{ "type": "nft_wall", "title": "string", "source": "manual" }],',
     `  "landmarks": [{ "id": "string", "type": "${controllableLandmarkTypes[0]}", "title": "string", "region": "east" }]`,
     "}",
     "Use 4 to 8 zones.",
     "Allowed zone types: entrance, main_stage, track_zone, project_booth, sponsor_zone, timeline, nft_wall, wallet_badge.",
     `Allowed landmark types: ${allowedLandmarkTypesText}.`,
     "Allowed landmark regions: north, south, east, west, northwest, northeast, southwest, southeast, center_ring, outer_ring.",
+    "Allowed terrainProfile values: coastal, forest, mountain, river, plain, mixed.",
+    "Allowed terrainDirective types: water, forest, mountain, sand, plain.",
+    "Allowed terrainDirective regions: north, south, east, west, northwest, northeast, southwest, southeast, center_ring, outer_ring.",
+    "Use terrainDirectives for explicit regional terrain requests like south water, west forest, northeast mountains, or beach/coast.",
+    "Keep terrainDirectives high-level. Do not output per-tile maps.",
+    `Use terrainSeed as an integer between 0 and 99999. For this run, prefer terrainSeed ${request.terrainRunSeed ?? 18342}.`,
     "Every zone must include exactly these keys: id, type, title, subtitle, position, color, accent, interactions.",
     "Every landmark must include exactly these keys: id, type, title, region.",
     "Do not use the keys label, size, or world.",
@@ -197,7 +206,11 @@ const deepSeekProvider: PlannerProvider = {
       throw new Error("DeepSeek response did not include message content.");
     }
 
-    const parsed = parseSceneSpec(JSON.parse(extractJsonObject(text)));
+    const parsedSpec = parseSceneSpec(JSON.parse(extractJsonObject(text)));
+    const parsed = {
+      ...parsedSpec,
+      terrainSeed: request.terrainRunSeed ?? parsedSpec.terrainSeed,
+    };
 
     return {
       planSummary: parsed.summary || `Generated a ${parsed.style} style ${parsed.title.toLowerCase()} scene spec.`,

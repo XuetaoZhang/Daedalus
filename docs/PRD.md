@@ -1485,6 +1485,32 @@ assets/
 - 外部链接、项目链接、链上证明需要显式展示，不隐藏跳转。
 - 所有 Agent 操作记录写入执行轨迹，方便评委审计。
 
+## 10.1 地形生成系统升级方向
+
+演示版 Daedalus 已经可以将结构化 scene spec 渲染为浏览器 3D 世界，但当前地形仍然偏固定规则生成。产品级版本需要升级为“地形感知世界生成系统”，让自然语言中的地貌意图真正影响地图、建筑和路径。
+
+升级目标包括：
+
+- 支持每次生成不同但可复现的地图地盘
+- 支持 LLM 输出高层地形意图，例如海岸、森林、山区、河流、湖泊、海湾
+- 通过程序化地形生成器稳定落地，而不是让 LLM 逐 tile 生成地图
+- 让 zone、landmark、道路、河流和地形之间互相约束
+- 增加地形验证与修复，例如建筑不落水、道路可达、海岸连续、地貌意图被满足
+
+建议架构：
+
+```text
+Prompt
+  -> Scene Planner
+  -> Terrain Plan
+  -> Terrain Generator
+  -> Layout Solver
+  -> World Validation
+  -> Renderer
+```
+
+具体技术方案见 [TerrainSystem.md](./TerrainSystem.md)。
+
 ## 11. Demo 脚本
 
 1. 打开 `Home` 页面，首屏直接看到 Daedalus 品牌、slogan 和 3D 世界背景。

@@ -6,6 +6,7 @@ import { clone as cloneSkinned } from "three/examples/jsm/utils/SkeletonUtils.js
 import type { LandmarkSpec, SceneSpec, WorldStyle, ZoneSpec } from "./sceneSpec";
 import { buildStudioWorldLayout, type StudioWorldLayout } from "./studioWorldLayout";
 import { controllableLandmarkList, controllableLandmarkRegistry, getControllableLandmarkAsset } from "./controllableAssets";
+import { MODEL_HEX_SIDE, axialToWorld, buildTerrainTiles } from "./terrain/terrainGenerator";
 
 type WorldRendererProps = {
   spec: SceneSpec;
@@ -18,28 +19,6 @@ type ModelProps = {
   scale?: number | [number, number, number];
   tint?: string;
   tintStrength?: number;
-};
-
-type TerrainTile = {
-  key: string;
-  url: string;
-  position: [number, number, number];
-  rotation?: [number, number, number];
-  scale?: number | [number, number, number];
-  tint?: string;
-  tintStrength?: number;
-};
-
-type HexCellCoord = {
-  q: number;
-  r: number;
-};
-
-type HexCell = HexCellCoord & {
-  key: string;
-  position: [number, number, number];
-  noise: number;
-  distance: number;
 };
 
 const hexAssetPath = "/kenney_hexagon-kit/Models/GLB%20format/";
@@ -74,9 +53,6 @@ const zoneRadiusByType: Record<ZoneSpec["type"], number> = {
   wallet_badge: 1.18,
 };
 
-const MODEL_HEX_HEIGHT = 1.154700517654419;
-const MODEL_HEX_SIDE = MODEL_HEX_HEIGHT / 2;
-const BASE_TILE_SCALE = 1.002;
 const DRAGON_ASSET_PATH = "/Dragon.glb";
 
 export function WorldRenderer({ spec }: WorldRendererProps) {
@@ -862,17 +838,17 @@ function RouteNetwork({ routeNetwork }: { routeNetwork: RouteNetworkShape }) {
           key={`path-route-${index}`}
           points={route}
           y={0.12}
-          width={0.2}
-          color="#7D5731"
-          coreColor="#D7B27A"
+          width={0.12}
+          color="#C9B38F"
+          coreColor="#F2DFC0"
         />
       ))}
       <RouteRibbon
         points={routeNetwork.riverRoute}
         y={0.1}
-        width={0.26}
-        color="#2B6798"
-        coreColor="#84D8FF"
+        width={0.18}
+        color="#6FB9C7"
+        coreColor="#BFEAF2"
       />
     </group>
   );
@@ -896,12 +872,12 @@ function RouteRibbon({
       {buildRouteSegments(sampleSmoothPath(points)).map((segment, index) => (
         <group key={`${color}-${index}`}>
           <mesh position={[segment.midX, y - 0.004, segment.midZ]} rotation={[0, segment.yaw, 0]} receiveShadow renderOrder={14}>
-            <boxGeometry args={[segment.length, 0.018, width]} />
-            <meshStandardMaterial color={color} roughness={0.94} metalness={0} transparent opacity={0.92} />
+            <boxGeometry args={[segment.length, 0.01, width]} />
+            <meshStandardMaterial color={color} roughness={0.94} metalness={0} transparent opacity={0.48} />
           </mesh>
           <mesh position={[segment.midX, y + 0.002, segment.midZ]} rotation={[0, segment.yaw, 0]} receiveShadow renderOrder={15}>
-            <boxGeometry args={[segment.length * 0.98, 0.01, width * 0.62]} />
-            <meshStandardMaterial color={coreColor} roughness={0.88} metalness={0} transparent opacity={0.94} />
+            <boxGeometry args={[segment.length * 0.98, 0.006, width * 0.54]} />
+            <meshStandardMaterial color={coreColor} roughness={0.88} metalness={0} transparent opacity={0.6} />
           </mesh>
         </group>
       ))}
@@ -914,149 +890,6 @@ function mixHexColors(a: string, b: string, amount: number) {
   const colorB = new THREE.Color(b);
   colorA.lerp(colorB, amount);
   return `#${colorA.getHexString()}`.toUpperCase();
-}
-
-function buildTerrainTiles(spec: SceneSpec, style: WorldStyle, layout: StudioWorldLayout): TerrainTile[] {
-  const tileSize = MODEL_HEX_SIDE;
-  const cellMap = new Map<string, HexCell>();
-  const searchRadius = layout.tileRadius;
-  const supportRadiusWithBleed = layout.supportRadius + MODEL_HEX_HEIGHT * 0.62;
-
-  for (let q = -searchRadius; q <= searchRadius; q += 1) {
-    for (let r = -searchRadius; r <= searchRadius; r += 1) {
-      const position = axialToWorld(q, r, tileSize);
-      if (Math.hypot(position[0], position[2]) > supportRadiusWithBleed) continue;
-
-      cellMap.set(hexKey(q, r), {
-        q,
-        r,
-        key: hexKey(q, r),
-        position,
-        noise: terrainNoise(q, r, style),
-        distance: Math.hypot(position[0], position[2]),
-      });
-    }
-  }
-
-  const zoneAnchors = layout.anchors;
-  const stageAnchor = zoneAnchors.find((anchor) => anchor.zone.type === "main_stage") ?? zoneAnchors[0];
-  const plazaCells = new Set<string>();
-  const pathCells = new Set<string>();
-  const riverCells = new Set<string>();
-  const forestCells = new Set<string>();
-  const stoneCells = new Set<string>();
-  const sandCells = new Set<string>();
-  const pathEdges = new Set<string>();
-  const riverEdges = new Set<string>();
-
-  for (const anchor of zoneAnchors) {
-    const plazaRadius = anchor.zone.type === "main_stage" ? 2 : 1;
-    for (const cell of hexDisk(anchor.cell, plazaRadius)) {
-      if (cellMap.has(hexKey(cell.q, cell.r))) {
-        plazaCells.add(hexKey(cell.q, cell.r));
-      }
-    }
-  }
-
-  for (const anchor of zoneAnchors) {
-    if (anchor === stageAnchor) continue;
-    addPathToEdgeSet(pathEdges, hexLine(stageAnchor.cell, anchor.cell));
-  }
-
-  for (const anchor of zoneAnchors) {
-    const plazaRadius = anchor.zone.type === "main_stage" ? 2 : 1;
-    const route = hexLine(stageAnchor.cell, anchor.cell);
-    const lastRouteCell = route[route.length - 1];
-    if (!lastRouteCell) continue;
-
-    const connectedNeighbor = nearestCellInDisk(lastRouteCell, hexDisk(anchor.cell, plazaRadius), (candidate) =>
-      cellMap.has(hexKey(candidate.q, candidate.r)),
-    );
-
-    if (connectedNeighbor) {
-      pathEdges.add(edgeKey(lastRouteCell, connectedNeighbor));
-    }
-  }
-
-  for (const cellKey of edgeCellsFromSet(pathEdges)) {
-    if (!plazaCells.has(cellKey) && cellMap.has(cellKey)) {
-      pathCells.add(cellKey);
-    }
-  }
-
-  const riverWaypoints = [
-    nearestExistingCell(cellMap, { q: -Math.max(4, Math.floor(searchRadius * 0.7)), r: 3 }),
-    nearestExistingCell(cellMap, { q: -3, r: 2 }),
-    nearestExistingCell(cellMap, { q: -1, r: 0 }),
-    nearestExistingCell(cellMap, { q: 2, r: -1 }),
-    nearestExistingCell(cellMap, { q: Math.max(4, Math.floor(searchRadius * 0.72)), r: -3 }),
-  ];
-
-  for (let index = 0; index < riverWaypoints.length - 1; index += 1) {
-    addPathToEdgeSet(riverEdges, hexLine(riverWaypoints[index], riverWaypoints[index + 1]));
-  }
-
-  for (const cellKey of edgeCellsFromSet(riverEdges)) {
-    if (!plazaCells.has(cellKey) && cellMap.has(cellKey)) {
-      riverCells.add(cellKey);
-    }
-  }
-
-  for (const cell of cellMap.values()) {
-    if (plazaCells.has(cell.key) || pathCells.has(cell.key) || riverCells.has(cell.key)) continue;
-
-    if (cell.distance > layout.supportRadius - 1.75 && cell.noise > 0.66) forestCells.add(cell.key);
-    else if (cell.distance > layout.supportRadius - 1.35 && cell.noise > 0.52) stoneCells.add(cell.key);
-    else if (cell.noise < 0.16) sandCells.add(cell.key);
-  }
-
-  const tiles: TerrainTile[] = [];
-
-  for (const cell of cellMap.values()) {
-    let asset = `${hexAssetPath}grass.glb`;
-    let tint: string | undefined;
-    let tintStrength = 0;
-
-    if (plazaCells.has(cell.key)) {
-      asset = cell.noise > 0.5 ? `${hexAssetPath}sand.glb` : `${hexAssetPath}grass.glb`;
-    } else if (forestCells.has(cell.key)) {
-      asset = `${hexAssetPath}grass-forest.glb`;
-    } else if (stoneCells.has(cell.key)) {
-      asset = cell.noise > 0.74 ? `${hexAssetPath}stone-mountain.glb` : `${hexAssetPath}stone-rocks.glb`;
-    } else if (sandCells.has(cell.key)) {
-      asset = cell.noise < 0.07 ? `${hexAssetPath}sand-rocks.glb` : `${hexAssetPath}sand.glb`;
-    } else if (cell.noise > 0.63) {
-      asset = `${hexAssetPath}grass-hill.glb`;
-    }
-
-    if (style === "animation" && !asset.includes("water") && !asset.includes("path")) {
-      tint = "#B6E4DD";
-      tintStrength = 0.12;
-    }
-
-    if (style === "voxel" && asset.includes("grass")) {
-      tint = "#8DCB78";
-      tintStrength = 0.15;
-    }
-
-    tiles.push({
-      key: `base-${cell.key}`,
-      url: asset,
-      position: cell.position,
-      rotation: [0, 0, 0],
-      scale: BASE_TILE_SCALE,
-      tint,
-      tintStrength,
-    });
-
-    void pathCells;
-    void riverCells;
-    void pathEdges;
-    void riverEdges;
-    void plazaCells;
-  }
-
-  return tiles;
 }
 
 function buildRouteNetwork(layout: StudioWorldLayout): RouteNetworkShape {
@@ -1221,139 +1054,6 @@ function sampleSmoothPath(points: Array<[number, number, number]>) {
   const sampled = curve.getPoints(divisions);
 
   return sampled.map((point) => [point.x, point.y, point.z] as [number, number, number]);
-}
-
-function axialToWorld(q: number, r: number, size: number): [number, number, number] {
-  const x = size * Math.sqrt(3) * (q + r / 2);
-  const z = size * 1.5 * r;
-  return [x, 0, z];
-}
-
-function roundAxial(q: number, r: number) {
-  const x = q;
-  const z = r;
-  const y = -x - z;
-
-  let rx = Math.round(x);
-  let ry = Math.round(y);
-  let rz = Math.round(z);
-
-  const xDiff = Math.abs(rx - x);
-  const yDiff = Math.abs(ry - y);
-  const zDiff = Math.abs(rz - z);
-
-  if (xDiff > yDiff && xDiff > zDiff) {
-    rx = -ry - rz;
-  } else if (yDiff > zDiff) {
-    ry = -rx - rz;
-  } else {
-    rz = -rx - ry;
-  }
-
-  return { q: rx, r: rz };
-}
-
-function terrainNoise(q: number, r: number, style: WorldStyle) {
-  const seed = style === "game" ? 17 : style === "animation" ? 29 : 41;
-  const raw = Math.sin(q * 12.9898 + r * 78.233 + seed) * 43758.5453;
-  return raw - Math.floor(raw);
-}
-
-function hexKey(q: number, r: number) {
-  return `${q}:${r}`;
-}
-
-function hexDisk(center: HexCellCoord, radius: number) {
-  const cells: HexCellCoord[] = [];
-  for (let dq = -radius; dq <= radius; dq += 1) {
-    for (let dr = Math.max(-radius, -dq - radius); dr <= Math.min(radius, -dq + radius); dr += 1) {
-      cells.push({ q: center.q + dq, r: center.r + dr });
-    }
-  }
-  return cells;
-}
-
-function hexLine(a: HexCellCoord, b: HexCellCoord) {
-  const distance = hexDistance(a, b);
-  const cells: HexCellCoord[] = [];
-
-  for (let step = 0; step <= distance; step += 1) {
-    const t = distance === 0 ? 0 : step / distance;
-    cells.push(roundAxial(THREE.MathUtils.lerp(a.q, b.q, t), THREE.MathUtils.lerp(a.r, b.r, t)));
-  }
-
-  return dedupeCells(cells);
-}
-
-function hexDistance(a: HexCellCoord, b: HexCellCoord) {
-  const as = -a.q - a.r;
-  const bs = -b.q - b.r;
-  return Math.max(Math.abs(a.q - b.q), Math.abs(a.r - b.r), Math.abs(as - bs));
-}
-
-function dedupeCells(cells: HexCellCoord[]) {
-  const seen = new Set<string>();
-  return cells.filter((cell) => {
-    const key = hexKey(cell.q, cell.r);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
-function nearestExistingCell(cellMap: Map<string, HexCell>, preferred: HexCellCoord) {
-  if (cellMap.has(hexKey(preferred.q, preferred.r))) return preferred;
-
-  let bestCell: HexCellCoord | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  for (const cell of cellMap.values()) {
-    const distance = hexDistance(cell, preferred);
-    if (distance < bestDistance) {
-      bestDistance = distance;
-      bestCell = { q: cell.q, r: cell.r };
-    }
-  }
-
-  return bestCell ?? preferred;
-}
-
-function nearestCellInDisk(origin: HexCellCoord, candidates: HexCellCoord[], predicate: (candidate: HexCellCoord) => boolean) {
-  let best: HexCellCoord | null = null;
-  let bestDistance = Number.POSITIVE_INFINITY;
-
-  for (const candidate of candidates) {
-    if (!predicate(candidate)) continue;
-    const distance = hexDistance(origin, candidate);
-    if (distance > 0 && distance < bestDistance) {
-      bestDistance = distance;
-      best = candidate;
-    }
-  }
-
-  return best;
-}
-
-function edgeKey(a: HexCellCoord, b: HexCellCoord) {
-  const aKey = hexKey(a.q, a.r);
-  const bKey = hexKey(b.q, b.r);
-  return aKey < bKey ? `${aKey}|${bKey}` : `${bKey}|${aKey}`;
-}
-
-function addPathToEdgeSet(edgeSet: Set<string>, cells: HexCellCoord[]) {
-  for (let index = 0; index < cells.length - 1; index += 1) {
-    edgeSet.add(edgeKey(cells[index], cells[index + 1]));
-  }
-}
-
-function edgeCellsFromSet(edgeSet: Set<string>) {
-  const cells = new Set<string>();
-  for (const edge of edgeSet) {
-    const [a, b] = edge.split("|");
-    cells.add(a);
-    cells.add(b);
-  }
-  return cells;
 }
 
 [

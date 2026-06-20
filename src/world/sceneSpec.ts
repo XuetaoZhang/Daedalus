@@ -1,4 +1,5 @@
 import type { ControllableLandmarkType } from "./controllableAssets";
+import type { TerrainDirective, TerrainProfile } from "./terrain/terrainTypes";
 
 export type ZoneType =
   | "entrance"
@@ -67,6 +68,9 @@ export type SceneSpec = {
   theme: SceneTheme;
   style: WorldStyle;
   worldType: WorldType;
+  terrainSeed?: number;
+  terrainProfile?: TerrainProfile;
+  terrainDirectives?: TerrainDirective[];
   constraints?: SceneConstraint[];
   zones: ZoneSpec[];
   web3Proofs: Web3ProofSpec[];

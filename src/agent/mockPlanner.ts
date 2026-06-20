@@ -1,6 +1,8 @@
 import type { LandmarkIntent, PlannerOutput, StudioGenerationRequest, WorldTypeMap } from "./types";
 import type { LandmarkSpec, SceneSpec, Web3ProofSpec, ZoneSpec } from "../world/sceneSpec";
 import { controllableLandmarkList } from "../world/controllableAssets";
+import { terrainProfileForPrompt, terrainSeedFromPrompt } from "../world/terrain/terrainGenerator";
+import type { TerrainDirective, TerrainDirectiveType } from "../world/terrain/terrainTypes";
 
 const DISPLAY_PROVIDER_DEMO = "GLM Demo Planner";
 const DISPLAY_MODEL_DEMO = "glm-5.1";
@@ -152,6 +154,74 @@ function inferLandmarks(prompt: string): LandmarkIntent[] {
   return intents.slice(0, 6);
 }
 
+type TerrainKeywordSpec = {
+  type: TerrainDirectiveType;
+  keywords: string[];
+  fallbackRegion: TerrainDirective["region"];
+};
+
+const terrainKeywordSpecs: TerrainKeywordSpec[] = [
+  {
+    type: "water",
+    keywords: ["水域", "湖泊", "湖", "海湾", "海岸", "海边", "河流", "河边", "water area", "lake", "bay", "coast", "coastal", "seaside", "ocean", "sea", "river"],
+    fallbackRegion: "south",
+  },
+  {
+    type: "forest",
+    keywords: ["森林", "树林", "林地", "forest", "woods", "woodland"],
+    fallbackRegion: "west",
+  },
+  {
+    type: "mountain",
+    keywords: ["山区", "山地", "山脉", "高山", "mountain", "mountains", "highland", "rocky"],
+    fallbackRegion: "northeast",
+  },
+  {
+    type: "sand",
+    keywords: ["沙滩", "沙地", "沙漠", "beach", "sand", "desert"],
+    fallbackRegion: "south",
+  },
+  {
+    type: "plain",
+    keywords: ["平原", "草地", "草原", "plain", "plains", "meadow", "grassland"],
+    fallbackRegion: "center_ring",
+  },
+];
+
+function inferTerrainDirectives(prompt: string): TerrainDirective[] {
+  const directives: TerrainDirective[] = [];
+
+  for (const spec of terrainKeywordSpecs) {
+    const { index, length } = findKeywordIndex(prompt, spec.keywords);
+    if (index === -1) continue;
+
+    const region = inferRegionNearKeyword(prompt, index, length, spec.fallbackRegion);
+    const localWindow = prompt.slice(Math.max(0, index - 20), Math.min(prompt.length, index + length + 20));
+    const dense = /全是|大片|很多|密集|dense|full|large|mostly/.test(localWindow);
+    const small = /小片|少量|light|small/.test(localWindow);
+    const crescent = /半月|月牙|crescent/.test(localWindow);
+    const linear = /一条|沿着|linear|line/.test(localWindow);
+
+    directives.push({
+      type: spec.type,
+      region,
+      shape: crescent ? "crescent" : linear ? "linear" : "blob",
+      density: dense ? "dense" : small ? "light" : "medium",
+      size: dense ? "large" : small ? "small" : "medium",
+    });
+  }
+
+  const seen = new Set<string>();
+  return directives
+    .filter((directive) => {
+      const key = `${directive.region}:${directive.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+}
+
 export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOutput {
   const palette = paletteByStyle[request.style];
   const prompt = request.prompt.toLowerCase();
@@ -230,6 +300,9 @@ export function buildMockSceneSpec(request: StudioGenerationRequest): PlannerOut
     theme: request.theme,
     style: request.style,
     worldType: worldTypeMap[request.sceneType],
+    terrainSeed: request.terrainRunSeed ?? terrainSeedFromPrompt(prompt),
+    terrainProfile: terrainProfileForPrompt(prompt),
+    terrainDirectives: inferTerrainDirectives(prompt),
     constraints: request.constraints,
     zones,
     web3Proofs,

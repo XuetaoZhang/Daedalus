@@ -44,6 +44,7 @@ export type StudioGenerationRequest = {
   style: WorldStyle;
   theme: SceneTheme;
   constraints: SceneConstraint[];
+  terrainRunSeed?: number;
 };
 
 export type PlannerOutput = {

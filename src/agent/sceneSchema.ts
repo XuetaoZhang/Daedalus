@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { SceneSpec } from "../world/sceneSpec";
 import { controllableLandmarkAliasMap, controllableLandmarkRegistry, controllableLandmarkTypes } from "../world/controllableAssets";
+import type { TerrainDirective, TerrainDirectiveRegion, TerrainDirectiveType, TerrainProfile } from "../world/terrain/terrainTypes";
 
 const hexColor = /^#([0-9a-fA-F]{6})$/;
 
@@ -24,6 +25,27 @@ const sceneConstraintSchema = z.enum([
 ]);
 
 const landmarkTypeSchema = z.enum(controllableLandmarkTypes);
+const terrainProfileSchema = z.enum(["coastal", "forest", "mountain", "river", "plain", "mixed"]);
+const terrainDirectiveTypeSchema = z.enum(["water", "forest", "mountain", "sand", "plain"]);
+const terrainDirectiveRegionSchema = z.enum([
+  "north",
+  "south",
+  "east",
+  "west",
+  "northwest",
+  "northeast",
+  "southwest",
+  "southeast",
+  "center_ring",
+  "outer_ring",
+]);
+const terrainDirectiveSchema = z.object({
+  type: terrainDirectiveTypeSchema,
+  region: terrainDirectiveRegionSchema,
+  shape: z.enum(["soft", "crescent", "linear", "blob"]).optional(),
+  density: z.enum(["light", "medium", "dense"]).optional(),
+  size: z.enum(["small", "medium", "large"]).optional(),
+});
 const landmarkRegionSchema = z.enum([
   "north",
   "south",
@@ -71,6 +93,9 @@ export const sceneSpecSchema = z.object({
   theme: z.enum(["futuristic", "minimal", "industrial"]),
   style: z.enum(["game", "animation", "voxel"]),
   worldType: z.enum(["web3_demo_day", "dao_hall", "nft_gallery"]),
+  terrainSeed: z.number().int().min(0).max(99999).optional(),
+  terrainProfile: terrainProfileSchema.optional(),
+  terrainDirectives: z.array(terrainDirectiveSchema).max(8).optional(),
   constraints: z.array(sceneConstraintSchema).optional(),
   zones: z.array(zoneSchema).min(4).max(12),
   web3Proofs: z.array(proofSchema).min(1).max(4),
@@ -138,6 +163,146 @@ const worldTypeAliases: Record<string, SceneSpec["worldType"]> = {
   dao: "dao_hall",
   nft_gallery: "nft_gallery",
   gallery: "nft_gallery",
+};
+
+const terrainProfileAliases: Record<string, TerrainProfile> = {
+  coastal: "coastal",
+  coast: "coastal",
+  beach: "coastal",
+  bay: "coastal",
+  seaside: "coastal",
+  sea: "coastal",
+  ocean: "coastal",
+  forest: "forest",
+  woods: "forest",
+  woodland: "forest",
+  mountain: "mountain",
+  mountains: "mountain",
+  highland: "mountain",
+  river: "river",
+  stream: "river",
+  plain: "plain",
+  plains: "plain",
+  meadow: "plain",
+  mixed: "mixed",
+  海边: "coastal",
+  海岸: "coastal",
+  海湾: "coastal",
+  森林: "forest",
+  山区: "mountain",
+  山地: "mountain",
+  河流: "river",
+  河边: "river",
+  平原: "plain",
+  草原: "plain",
+};
+
+const terrainDirectiveTypeAliases: Record<string, TerrainDirectiveType> = {
+  water: "water",
+  waters: "water",
+  lake: "water",
+  lakes: "water",
+  sea: "water",
+  ocean: "water",
+  coast: "water",
+  coastal: "water",
+  beach: "sand",
+  bay: "water",
+  river: "water",
+  stream: "water",
+  forest: "forest",
+  woods: "forest",
+  woodland: "forest",
+  tree: "forest",
+  trees: "forest",
+  mountain: "mountain",
+  mountains: "mountain",
+  hill: "mountain",
+  hills: "mountain",
+  rock: "mountain",
+  rocky: "mountain",
+  sand: "sand",
+  desert: "sand",
+  plain: "plain",
+  plains: "plain",
+  grass: "plain",
+  meadow: "plain",
+  水域: "water",
+  水: "water",
+  湖: "water",
+  湖泊: "water",
+  海: "water",
+  海边: "water",
+  海岸: "water",
+  海湾: "water",
+  河: "water",
+  河流: "water",
+  森林: "forest",
+  树林: "forest",
+  林地: "forest",
+  山: "mountain",
+  山区: "mountain",
+  山地: "mountain",
+  山脉: "mountain",
+  沙地: "sand",
+  沙滩: "sand",
+  沙漠: "sand",
+  平原: "plain",
+  草地: "plain",
+  草原: "plain",
+};
+
+const terrainDirectiveRegionAliases: Record<string, TerrainDirectiveRegion> = {
+  north: "north",
+  south: "south",
+  east: "east",
+  west: "west",
+  northwest: "northwest",
+  northeast: "northeast",
+  southwest: "southwest",
+  southeast: "southeast",
+  north_west: "northwest",
+  north_east: "northeast",
+  south_west: "southwest",
+  south_east: "southeast",
+  top_left: "northwest",
+  upper_left: "northwest",
+  left_top: "northwest",
+  top_right: "northeast",
+  upper_right: "northeast",
+  right_top: "northeast",
+  bottom_left: "southwest",
+  lower_left: "southwest",
+  left_bottom: "southwest",
+  bottom_right: "southeast",
+  lower_right: "southeast",
+  right_bottom: "southeast",
+  center: "center_ring",
+  center_ring: "center_ring",
+  middle: "center_ring",
+  outer: "outer_ring",
+  outer_ring: "outer_ring",
+  edge: "outer_ring",
+  左上: "northwest",
+  右上: "northeast",
+  左下: "southwest",
+  右下: "southeast",
+  上方: "north",
+  下方: "south",
+  左侧: "west",
+  右侧: "east",
+  北侧: "north",
+  北边: "north",
+  南侧: "south",
+  南边: "south",
+  东侧: "east",
+  东边: "east",
+  西侧: "west",
+  西边: "west",
+  东北: "northeast",
+  西北: "northwest",
+  东南: "southeast",
+  西南: "southwest",
 };
 
 const constraintAliases: Record<string, z.infer<typeof sceneConstraintSchema>> = {
@@ -296,6 +461,12 @@ function normalizePosition(value: unknown): [number, number, number] {
   return [x, y, z];
 }
 
+function normalizeTerrainSeed(value: unknown) {
+  const numeric = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
+  if (!Number.isFinite(numeric)) return undefined;
+  return Math.round(clamp(numeric, 0, 99999));
+}
+
 function inferProofSource(record: LooseRecord): z.infer<typeof proofSchema.shape.source> {
   const direct = record.source;
   if (direct === "mock_metadata" || direct === "testnet" || direct === "manual") return direct;
@@ -391,6 +562,48 @@ function normalizeLandmark(input: unknown, index: number) {
   };
 }
 
+function normalizeTerrainDirective(input: unknown): TerrainDirective | null {
+  const record = asRecord(input);
+  const type = parseAlias(
+    record.type ?? record.kind ?? record.biome ?? record.terrainType,
+    terrainDirectiveTypeAliases,
+    "plain",
+  );
+  const region = parseAlias(
+    record.region ?? record.area ?? record.location ?? record.direction,
+    terrainDirectiveRegionAliases,
+    "outer_ring",
+  );
+  const shape = parseAlias(record.shape, { soft: "soft", crescent: "crescent", linear: "linear", blob: "blob" }, "soft");
+  const density = parseAlias(record.density ?? record.intensity, { light: "light", medium: "medium", dense: "dense" }, "medium");
+  const size = parseAlias(record.size ?? record.scale, { small: "small", medium: "medium", large: "large" }, "medium");
+
+  return {
+    type,
+    region,
+    shape,
+    density,
+    size,
+  };
+}
+
+function normalizeTerrainDirectives(input: unknown) {
+  const source = Array.isArray(input) ? input : [];
+  const directives = source
+    .map((entry) => normalizeTerrainDirective(entry))
+    .filter((entry): entry is TerrainDirective => Boolean(entry));
+  const seen = new Set<string>();
+
+  return directives
+    .filter((directive) => {
+      const key = `${directive.region}:${directive.type}:${directive.shape}:${directive.size}:${directive.density}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 8);
+}
+
 function normalizeWeb3Proofs(input: unknown, zones: Array<ReturnType<typeof normalizeZone>>) {
   const proofs: Array<ReturnType<typeof normalizeProof>> = [];
 
@@ -450,6 +663,16 @@ export function normalizeSceneSpecInput(input: unknown): SceneSpec {
       : Array.isArray(record.landmarkModules)
         ? record.landmarkModules
         : [];
+  const terrainPlan = asRecord(record.terrainPlan);
+  const terrainDirectiveSource = Array.isArray(record.terrainDirectives)
+    ? record.terrainDirectives
+    : Array.isArray(record.directives)
+      ? record.directives
+      : Array.isArray(terrainPlan.directives)
+        ? terrainPlan.directives
+        : Array.isArray(terrainPlan.terrainDirectives)
+          ? terrainPlan.terrainDirectives
+          : [];
 
   return {
     title:
@@ -463,6 +686,9 @@ export function normalizeSceneSpecInput(input: unknown): SceneSpec {
     theme: parseAlias(record.theme, themeAliases, "futuristic"),
     style: parseAlias(record.style, styleAliases, "game"),
     worldType: parseAlias(record.worldType ?? record.sceneType, worldTypeAliases, "web3_demo_day"),
+    terrainSeed: normalizeTerrainSeed(record.terrainSeed ?? record.seed),
+    terrainProfile: parseAlias(record.terrainProfile ?? record.terrain ?? record.biomeProfile, terrainProfileAliases, "mixed"),
+    terrainDirectives: normalizeTerrainDirectives(terrainDirectiveSource),
     constraints: Array.isArray(record.constraints)
       ? record.constraints
           .map((constraint) => parseAlias(constraint, constraintAliases, "browser_ready"))

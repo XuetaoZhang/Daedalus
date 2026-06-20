@@ -321,9 +321,13 @@ function StudioPage({ onGoHome }: { onGoHome: () => void }) {
     if (!request.prompt.trim()) return;
 
     setIsRunning(true);
+    const runRequest: StudioGenerationRequest = {
+      ...request,
+      terrainRunSeed: Math.floor(Date.now() % 100000),
+    };
 
     try {
-      await runStudioWorkflow(request, (next) => {
+      await runStudioWorkflow(runRequest, (next) => {
         setSnapshot(next);
       });
     } catch (error) {
