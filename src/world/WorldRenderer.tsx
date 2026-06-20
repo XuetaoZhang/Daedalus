@@ -488,6 +488,7 @@ function LandmarkPrefab({
   const tint = style === "animation" ? "#8AD6FF" : style === "voxel" ? "#8BC779" : "#5E6B84";
   const asset = getControllableLandmarkAsset(landmark.type);
   if (!asset) return null;
+  const displayPosition = adjustedLandmarkPosition(landmark, position);
 
   const modelProps = {
     url: `${hexAssetPath}${asset.type}.glb`,
@@ -499,10 +500,50 @@ function LandmarkPrefab({
   };
 
   return (
-    <group position={position}>
+    <group position={displayPosition}>
       {asset.animated ? <AnimatedLandmarkModel {...modelProps} /> : <PrefabModel {...modelProps} />}
     </group>
   );
+}
+
+function adjustedLandmarkPosition(landmark: LandmarkSpec, position: [number, number, number]): [number, number, number] {
+  if (
+    landmark.type !== "building-dock" &&
+    landmark.type !== "building-port" &&
+    landmark.type !== "building-watermill"
+  ) {
+    return position;
+  }
+
+  const [directionX, directionZ] = waterfrontDirectionVector(landmark.region);
+  const offset = landmark.type === "building-watermill" ? 0.18 : 0.28;
+  return [position[0] + directionX * offset, position[1], position[2] + directionZ * offset];
+}
+
+function waterfrontDirectionVector(region: LandmarkSpec["region"]): [number, number] {
+  switch (region) {
+    case "north":
+      return [0, -1];
+    case "south":
+      return [0, 1];
+    case "east":
+      return [1, 0];
+    case "west":
+      return [-1, 0];
+    case "northeast":
+      return [0.7, -0.7];
+    case "northwest":
+      return [-0.7, -0.7];
+    case "southeast":
+      return [0.7, 0.7];
+    case "southwest":
+      return [-0.7, 0.7];
+    case "outer_ring":
+      return [0, 1];
+    case "center_ring":
+    default:
+      return [0, 1];
+  }
 }
 
 function ZoneMarker({ radius, color, accent }: { radius: number; color: string; accent: string }) {

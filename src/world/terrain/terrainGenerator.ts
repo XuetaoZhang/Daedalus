@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import type { SceneSpec, WorldStyle } from "../sceneSpec";
+import type { LandmarkRegion, SceneSpec, WorldStyle } from "../sceneSpec";
 import type { StudioWorldLayout } from "../studioWorldLayout";
 import type {
   HexCell,
@@ -20,6 +20,14 @@ export const MODEL_HEX_SIDE = MODEL_HEX_HEIGHT / 2;
 export const BASE_TILE_SCALE = 1.002;
 
 const hexAssetPath = "/kenney_hexagon-kit/Models/GLB%20format/";
+const HEX_DIRECTIONS: HexCellCoord[] = [
+  { q: 1, r: 0 },
+  { q: 1, r: -1 },
+  { q: 0, r: -1 },
+  { q: -1, r: 0 },
+  { q: -1, r: 1 },
+  { q: 0, r: 1 },
+];
 
 export function terrainProfileForPrompt(prompt: string): TerrainProfile {
   const normalized = prompt.toLowerCase();
@@ -80,6 +88,7 @@ export function buildTerrainPlan(spec: SceneSpec, style: WorldStyle, layout: Stu
   const riverCells = new Set<string>();
   const pathEdges = new Set<string>();
   const riverEdges = new Set<string>();
+  const landmarkBiomeOverrides = new Map<string, TerrainBiome>();
 
   for (const anchor of zoneAnchors) {
     const plazaRadius = anchor.zone.type === "main_stage" ? 2 : 1;
@@ -134,6 +143,16 @@ export function buildTerrainPlan(spec: SceneSpec, style: WorldStyle, layout: Stu
     }
   }
 
+  for (const anchor of layout.landmarkAnchors) {
+    applyLandmarkTerrainAffinity(
+      anchor.landmark.type,
+      anchor.landmark.region,
+      anchor.cell,
+      cellMap,
+      landmarkBiomeOverrides,
+    );
+  }
+
   const cells: TerrainPlanCell[] = [];
 
   for (const cell of cellMap.values()) {
@@ -144,14 +163,16 @@ export function buildTerrainPlan(spec: SceneSpec, style: WorldStyle, layout: Stu
 
     cells.push({
       ...cell,
-      biome: feature
-        ? protectedFeatureBiome(feature, cell)
-        : applyTerrainDirectives(
-            terrainBiomeForCell(cell, profile, layout),
-            cell,
-            layout,
-            spec.terrainDirectives ?? [],
-          ),
+      biome: landmarkBiomeOverrides.get(cell.key) ?? (
+        feature
+          ? protectedFeatureBiome(feature, cell)
+          : applyTerrainDirectives(
+              terrainBiomeForCell(cell, profile, layout),
+              cell,
+              layout,
+              spec.terrainDirectives ?? [],
+            )
+      ),
       feature,
     });
   }
@@ -215,6 +236,145 @@ function protectedFeatureBiome(feature: TerrainFeature, cell: HexCell): TerrainB
   if (feature === "river") return cell.noise > 0.72 ? "waterRocks" : "water";
   if (feature === "path") return "sand";
   return cell.noise > 0.54 ? "sand" : "grass";
+}
+
+function applyLandmarkTerrainAffinity(
+  landmarkType: string,
+  landmarkRegion: LandmarkRegion,
+  center: HexCellCoord,
+  cellMap: Map<string, HexCell>,
+  overrides: Map<string, TerrainBiome>,
+) {
+  const setBiome = (coord: HexCellCoord, biome: TerrainBiome) => {
+    const key = hexKey(coord.q, coord.r);
+    if (cellMap.has(key)) overrides.set(key, biome);
+  };
+  const setDisk = (radius: number, biome: TerrainBiome) => {
+    for (const coord of hexDisk(center, radius)) {
+      setBiome(coord, biome);
+    }
+  };
+  const setRing = (radius: number, biome: TerrainBiome) => {
+    for (const coord of hexRing(center, radius)) {
+      setBiome(coord, biome);
+    }
+  };
+
+  if (landmarkType === "building-dock" || landmarkType === "building-port" || landmarkType === "building-watermill") {
+    applyWaterfrontLandmarkPatch(center, landmarkRegion, setBiome);
+    return;
+  }
+
+  if (landmarkType === "bridge") {
+    setDisk(1, "water");
+    setRing(2, "sand");
+    setBiome(center, "water");
+    return;
+  }
+
+  if (
+    landmarkType === "building-mine" ||
+    landmarkType === "building-smelter" ||
+    landmarkType === "building-wizard-tower" ||
+    landmarkType === "building-tower"
+  ) {
+    setDisk(1, "stone");
+    setRing(2, "mountain");
+    setBiome(center, "stone");
+    return;
+  }
+
+  if (
+    landmarkType === "building-village" ||
+    landmarkType === "building-house" ||
+    landmarkType === "building-cabin" ||
+    landmarkType === "building-farm" ||
+    landmarkType === "building-sheep" ||
+    landmarkType === "building-market" ||
+    landmarkType === "building-archery" ||
+    landmarkType === "building-mill"
+  ) {
+    setDisk(1, "grass");
+    setRing(2, landmarkType === "building-mill" ? "hill" : "forest");
+    setBiome(center, "grass");
+    return;
+  }
+
+  if (landmarkType === "building-wall" || landmarkType === "building-walls" || landmarkType === "building-castle") {
+    setDisk(1, "sand");
+    setRing(2, "stone");
+    setBiome(center, "sand");
+  }
+}
+
+function applyWaterfrontLandmarkPatch(
+  center: HexCellCoord,
+  region: LandmarkRegion,
+  setBiome: (coord: HexCellCoord, biome: TerrainBiome) => void,
+) {
+  const waterDirection = coastDirectionForRegion(region);
+  const waterSideDirections = [
+    wrapDirectionIndex(waterDirection - 1),
+    waterDirection,
+    wrapDirectionIndex(waterDirection + 1),
+  ];
+  const landSideDirections = [
+    wrapDirectionIndex(waterDirection + 2),
+    wrapDirectionIndex(waterDirection + 3),
+    wrapDirectionIndex(waterDirection + 4),
+  ];
+
+  setBiome(center, "sand");
+
+  for (const direction of landSideDirections) {
+    setBiome(offsetCell(center, direction, 1), "sand");
+  }
+
+  for (const direction of waterSideDirections) {
+    setBiome(offsetCell(center, direction, 1), "water");
+    setBiome(offsetCell(center, direction, 2), direction === waterDirection ? "water" : "waterRocks");
+  }
+
+  setBiome(offsetCell(offsetCell(center, wrapDirectionIndex(waterDirection - 1), 1), waterDirection, 1), "water");
+  setBiome(offsetCell(offsetCell(center, wrapDirectionIndex(waterDirection + 1), 1), waterDirection, 1), "water");
+}
+
+function coastDirectionForRegion(region: LandmarkRegion) {
+  switch (region) {
+    case "north":
+      return 2;
+    case "south":
+      return 5;
+    case "east":
+      return 0;
+    case "west":
+      return 3;
+    case "northeast":
+      return 1;
+    case "northwest":
+      return 3;
+    case "southeast":
+      return 0;
+    case "southwest":
+      return 4;
+    case "outer_ring":
+      return 5;
+    case "center_ring":
+    default:
+      return 5;
+  }
+}
+
+function offsetCell(cell: HexCellCoord, directionIndex: number, distance: number): HexCellCoord {
+  const direction = HEX_DIRECTIONS[wrapDirectionIndex(directionIndex)];
+  return {
+    q: cell.q + direction.q * distance,
+    r: cell.r + direction.r * distance,
+  };
+}
+
+function wrapDirectionIndex(directionIndex: number) {
+  return (directionIndex + HEX_DIRECTIONS.length) % HEX_DIRECTIONS.length;
 }
 
 function applyTerrainDirectives(
@@ -462,6 +622,28 @@ function hexDisk(center: HexCellCoord, radius: number) {
       cells.push({ q: center.q + dq, r: center.r + dr });
     }
   }
+  return cells;
+}
+
+function hexRing(center: HexCellCoord, radius: number) {
+  if (radius <= 0) return [center];
+
+  const cells: HexCellCoord[] = [];
+  let current = {
+    q: center.q + HEX_DIRECTIONS[4].q * radius,
+    r: center.r + HEX_DIRECTIONS[4].r * radius,
+  };
+
+  for (let side = 0; side < 6; side += 1) {
+    for (let step = 0; step < radius; step += 1) {
+      cells.push({ ...current });
+      current = {
+        q: current.q + HEX_DIRECTIONS[side].q,
+        r: current.r + HEX_DIRECTIONS[side].r,
+      };
+    }
+  }
+
   return cells;
 }
 

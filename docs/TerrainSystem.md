@@ -274,6 +274,7 @@ Current implementation status:
 - terrain profiles already produce visibly different base terrain distributions
 - explicit region directives such as `南边一片水域`, `西侧森林`, and `东北侧山区` are now supported at a first-pass level
 - directives are applied as soft regional biome influences, while zone plazas and routes remain protected from terrain overwrite
+- landmark terrain affinity is active for common prefab types: docks, ports, watermills, and bridges create local water/sand context; mines, towers, smelters, and wizard towers create local stone/mountain context; villages, farms, houses, cabins, and markets keep walkable grass context
 
 ### Phase 3
 

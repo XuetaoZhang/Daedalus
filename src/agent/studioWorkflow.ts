@@ -87,6 +87,15 @@ function validateSceneSpec(spec: SceneSpec, request: StudioGenerationRequest) {
     });
   }
 
+  if ((spec.terrainDirectives?.length ?? 0) > 0 && !spec.terrainProfile) {
+    issues.push({
+      code: "terrain_profile_missing",
+      severity: "warning",
+      message: "Terrain directives are present but no terrain profile was provided.",
+      repairAction: "Use a mixed terrain profile so regional directives have a stable base map.",
+    });
+  }
+
   return issues;
 }
 
@@ -189,6 +198,12 @@ function createArtifacts(
     provider: providerSummary.provider,
     model: providerSummary.model,
     issues,
+    terrain: {
+      profile: spec.terrainProfile ?? "mixed",
+      seed: spec.terrainSeed,
+      directives: spec.terrainDirectives ?? [],
+      directiveCount: spec.terrainDirectives?.length ?? 0,
+    },
     repaired: issues.length > 0,
     repairDecision,
     completionDecision,

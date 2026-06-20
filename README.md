@@ -89,6 +89,7 @@ Notes:
 - Natural-language placement already supports directions such as `east`, `west`, `north`, `south`, `northeast`, `left top`, `东侧`, `南边`, `左上角`
 - Animated assets currently include `building-mill` and `building-watermill`
 - Terrain profiles change the overall map character, and regional terrain directives now support phrases such as `south water`, `west forest`, and `northeast mountains`
+- Landmark-aware terrain patches keep water-facing, mountain-facing, and settlement assets visually grounded
 
 ### Tech stack
 
@@ -242,6 +243,7 @@ Daedalus 采用受控 scene schema，而不是让模型直接生成任意前端�
 - 当前已经支持区域语义，如 `东侧`、`西侧`、`北侧`、`南边`、`东北角`、`左上角`
 - 当前带动画的资产是 `building-mill` 和 `building-watermill`
 - 当前地形档位会改变整体地图气质，并且区域地形指令已支持 `南边增加一片水域`、`西侧森林`、`东北侧山区` 这类表达
+- 地标周边会自动做地形适配，例如水车/码头靠近水域，矿场/魔法塔靠近山石，村庄/农场保持可行走草地
 
 ### 示例提示词
 
